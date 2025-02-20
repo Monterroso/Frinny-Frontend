@@ -1,0 +1,18 @@
+{
+    "frinny": {
+        "settings": {
+            "showAvatar": {
+                "name": "Show Avatar",
+                "hint": "Toggle visibility of Frinny's avatar"
+            }
+        },
+        "ui": {
+            "placeholder": "Ask Frinny...",
+            "typing": "Frinny is thinking",
+            "feedback": {
+                "helpful": "Helpful",
+                "notHelpful": "Not Helpful"
+            }
+        }
+    }
+} 
