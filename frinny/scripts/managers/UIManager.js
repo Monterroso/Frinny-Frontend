@@ -29,9 +29,15 @@ export class FrinnyChat extends Application {
         // Load saved messages
         this._loadMessages();
 
-        // Initialize connection
+        // Initialize connection and set up typing callback
         this.agentManager.connect().catch(error => {
             console.error('Frinny | Failed to connect:', error);
+        });
+
+        // Set up typing status callback
+        this.agentManager.onTypingStatus((isTyping) => {
+            this.isTyping = isTyping;
+            this.render(false);
         });
     }
 
@@ -187,10 +193,6 @@ export class FrinnyChat extends Application {
             timestamp: Date.now()
         });
 
-        // Show typing indicator
-        this.isTyping = true;
-        this.render(false);
-
         try {
             // Get response from agent
             const response = await this.agentManager.handleUserQuery(game.user.id, content);
@@ -206,10 +208,6 @@ export class FrinnyChat extends Application {
                 timestamp: Date.now(),
                 showFeedback: false
             });
-        } finally {
-            // Hide typing indicator
-            this.isTyping = false;
-            this.render(false);
         }
     }
 
