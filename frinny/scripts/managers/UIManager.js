@@ -21,13 +21,15 @@ export class FrinnyChat extends Application {
         // Initialize window state
         this.position = game.user.getFlag("frinny", "windowPosition") || {};
         this.isVisible = game.user.getFlag("frinny", "windowVisible") ?? false;
+        this.isAvatarCollapsed = game.user.getFlag("frinny", "avatarCollapsed") ?? false;
     }
 
     getData() {
         return {
             messages: this.messages,
             isTyping: this.isTyping,
-            avatarUrl: "modules/frinny/assets/images/default.png"
+            avatarUrl: "modules/frinny/assets/images/default.png",
+            isAvatarCollapsed: this.isAvatarCollapsed
         };
     }
 
@@ -78,6 +80,20 @@ export class FrinnyChat extends Application {
         // Input handling
         const input = html.find('.chat-input');
         const sendButton = html.find('.send-button');
+
+        // Avatar toggle handling
+        const avatarToggle = html.find('.avatar-toggle');
+        const avatarPanel = html.find('.avatar-panel');
+        
+        if (this.isAvatarCollapsed) {
+            avatarPanel.addClass('collapsed');
+        }
+
+        avatarToggle.on('click', async () => {
+            this.isAvatarCollapsed = !this.isAvatarCollapsed;
+            avatarPanel.toggleClass('collapsed');
+            await game.user.setFlag("frinny", "avatarCollapsed", this.isAvatarCollapsed);
+        });
 
         // Send on enter
         input.on('keypress', (event) => {

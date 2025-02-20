@@ -12,7 +12,8 @@
             "feedback": {
                 "helpful": "Helpful",
                 "notHelpful": "Not Helpful"
-            }
+            },
+            "toggleAvatar": "Toggle Avatar Panel"
         }
     }
 } 
