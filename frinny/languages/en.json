@@ -4,6 +4,10 @@
             "showAvatar": {
                 "name": "Show Avatar",
                 "hint": "Toggle visibility of Frinny's avatar"
+            },
+            "maxMessages": {
+                "name": "Message History Size",
+                "hint": "Number of messages to keep in history (10-200). Older messages will be removed."
             }
         },
         "ui": {
@@ -11,9 +15,14 @@
             "typing": "Frinny is thinking",
             "feedback": {
                 "helpful": "Helpful",
-                "notHelpful": "Not Helpful"
+                "notHelpful": "Not Helpful",
+                "submitted": "Thank you for your feedback!",
+                "error": "Failed to submit feedback"
             },
             "toggleAvatar": "Toggle Avatar Panel"
+        },
+        "error": {
+            "failedResponse": "I apologize, but I encountered an error processing your request. Please try again."
         }
     }
 } 

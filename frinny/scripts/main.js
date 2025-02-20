@@ -25,6 +25,20 @@ Hooks.once('ready', () => {
         }
     });
 
+    game.settings.register('frinny', 'maxMessages', {
+        name: game.i18n.localize('frinny.settings.maxMessages.name'),
+        hint: game.i18n.localize('frinny.settings.maxMessages.hint'),
+        scope: 'client',
+        config: true,
+        type: Number,
+        default: 50,
+        range: {
+            min: 10,
+            max: 200,
+            step: 10
+        }
+    });
+
     // Initialize the chat window
     game.frinny = new FrinnyChat();
     

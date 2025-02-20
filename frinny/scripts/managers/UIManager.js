@@ -1,3 +1,5 @@
+import { AgentManager } from './AgentManager.js';
+
 export class FrinnyChat extends Application {
     static get defaultOptions() {
         return mergeObject(super.defaultOptions, {
@@ -17,11 +19,65 @@ export class FrinnyChat extends Application {
         super(options);
         this.isTyping = false;
         this.messages = [];
+        this.agentManager = new AgentManager();
         
         // Initialize window state
         this.position = game.user.getFlag("frinny", "windowPosition") || {};
         this.isVisible = game.user.getFlag("frinny", "windowVisible") ?? false;
         this.isAvatarCollapsed = game.user.getFlag("frinny", "avatarCollapsed") ?? false;
+
+        // Load saved messages
+        this._loadMessages();
+
+        // Initialize connection
+        this.agentManager.connect().catch(error => {
+            console.error('Frinny | Failed to connect:', error);
+        });
+    }
+
+    /**
+     * Load messages from Foundry flags
+     * @private
+     */
+    async _loadMessages() {
+        const savedMessages = await game.user.getFlag("frinny", "messages") || [];
+        this.messages = savedMessages;
+    }
+
+    /**
+     * Save messages to Foundry flags
+     * @private
+     */
+    async _saveMessages() {
+        const maxMessages = game.settings.get("frinny", "maxMessages");
+        const messagesToSave = this.messages.slice(-maxMessages);
+        await game.user.setFlag("frinny", "messages", messagesToSave);
+    }
+
+    /**
+     * Add a message to the chat history
+     * @param {Object} message The message to add
+     * @private
+     */
+    async _addMessage(message) {
+        this.messages.push(message);
+        await this._saveMessages();
+        this.render(false);
+    }
+
+    /**
+     * Update a message in the chat history
+     * @param {string} messageId The ID of the message to update
+     * @param {Object} updates The updates to apply
+     * @private
+     */
+    async _updateMessage(messageId, updates) {
+        const message = this.messages.find(m => m.messageId === messageId);
+        if (message) {
+            Object.assign(message, updates);
+            await this._saveMessages();
+            this.render(false);
+        }
     }
 
     getData() {
@@ -125,7 +181,7 @@ export class FrinnyChat extends Application {
         if (!content.trim()) return;
 
         // Add user message
-        this.messages.push({
+        await this._addMessage({
             type: 'user',
             content: content,
             timestamp: Date.now()
@@ -135,23 +191,45 @@ export class FrinnyChat extends Application {
         this.isTyping = true;
         this.render(false);
 
-        // TODO: Integrate with AgentManager for AI response
-        // For now, just simulate a response
-        setTimeout(() => {
-            this.isTyping = false;
-            this.messages.push({
+        try {
+            // Get response from agent
+            const response = await this.agentManager.handleUserQuery(game.user.id, content);
+            
+            // Add response to messages
+            await this._addMessage(response);
+        } catch (error) {
+            console.error('Frinny | Error getting response:', error);
+            // Add error message
+            await this._addMessage({
                 type: 'assistant',
-                content: 'This is a placeholder response.',
+                content: game.i18n.localize('frinny.error.failedResponse'),
                 timestamp: Date.now(),
-                showFeedback: true,
-                messageId: Date.now().toString()
+                showFeedback: false
             });
+        } finally {
+            // Hide typing indicator
+            this.isTyping = false;
             this.render(false);
-        }, 1000);
+        }
     }
 
-    _handleFeedback(messageId, type) {
-        console.log(`Feedback received: ${type} for message ${messageId}`);
-        // TODO: Implement feedback handling
+    async _handleFeedback(messageId, type) {
+        try {
+            await this.agentManager.submitFeedback(messageId, type);
+            
+            // Update the message with feedback state
+            await this._updateMessage(messageId, {
+                feedbackSubmitted: true,
+                feedbackError: false
+            });
+        } catch (error) {
+            console.error('Frinny | Error submitting feedback:', error);
+            
+            // Update the message with error state
+            await this._updateMessage(messageId, {
+                feedbackSubmitted: false,
+                feedbackError: true
+            });
+        }
     }
 } 

@@ -110,6 +110,28 @@
     gap: 8px;
     margin-top: 8px;
     justify-content: flex-end;
+    transition: opacity 0.3s ease;
+}
+
+.feedback.submitted {
+    justify-content: center;
+    color: #28a745;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.feedback.error {
+    justify-content: center;
+    color: #dc3545;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.feedback-confirmation,
+.feedback-error {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
 }
 
 .feedback button {

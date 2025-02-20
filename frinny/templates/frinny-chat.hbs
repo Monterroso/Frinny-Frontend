@@ -11,16 +11,22 @@
                 <div class="message {{type}}" data-message-id="{{messageId}}">
                     <div class="content">{{content}}</div>
                     {{#if showFeedback}}
-                        <div class="feedback">
-                            <button class="thumbs-up" title="Helpful"><i class="fas fa-thumbs-up"></i></button>
-                            <button class="thumbs-down" title="Not Helpful"><i class="fas fa-thumbs-down"></i></button>
+                        <div class="feedback {{#if feedbackSubmitted}}submitted{{/if}} {{#if feedbackError}}error{{/if}}">
+                            {{#if feedbackSubmitted}}
+                                <div class="feedback-confirmation">{{localize 'frinny.ui.feedback.submitted'}}</div>
+                            {{else if feedbackError}}
+                                <div class="feedback-error">{{localize 'frinny.ui.feedback.error'}}</div>
+                            {{else}}
+                                <button class="thumbs-up" title="{{localize 'frinny.ui.feedback.helpful'}}"><i class="fas fa-thumbs-up"></i></button>
+                                <button class="thumbs-down" title="{{localize 'frinny.ui.feedback.notHelpful'}}"><i class="fas fa-thumbs-down"></i></button>
+                            {{/if}}
                         </div>
                     {{/if}}
                 </div>
             {{/each}}
             {{#if isTyping}}
                 <div class="typing-indicator">
-                    <span>Frinny is thinking</span>
+                    <span>{{localize 'frinny.ui.typing'}}</span>
                     <span class="dots">
                         <span>.</span><span>.</span><span>.</span>
                     </span>
@@ -28,7 +34,7 @@
             {{/if}}
         </div>
         <div class="input-area">
-            <input type="text" class="chat-input" placeholder="Ask Frinny..." />
+            <input type="text" class="chat-input" placeholder="{{localize 'frinny.ui.placeholder'}}" />
             <button class="send-button">
                 <i class="fas fa-paper-plane"></i>
             </button>
