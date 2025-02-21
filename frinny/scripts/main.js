@@ -13,11 +13,11 @@ import { logHookExecution, logHookSkip, logError, logStateChange } from './utils
 import { isUserCharacterTurn, gatherCombatStateData, isCombatStarting, getVisibleEnemies, getVisibleAllies } from './utils/combatUtils.js';
 
 Hooks.once('init', () => {
-    console.log('Frinny | Initializing module');
+    logHookExecution('init', { module: 'frinny' });
 });
 
 Hooks.once('ready', () => {
-    console.log('Frinny | Module ready, initializing settings and UI');
+    logHookExecution('ready', { module: 'frinny' });
     
     try {
         // Register module settings
@@ -29,12 +29,12 @@ Hooks.once('ready', () => {
             type: Boolean,
             default: true,
             onChange: value => {
-                console.log('Frinny | Avatar visibility setting changed:', value);
+                logStateChange('Avatar', 'visibility changed', { value });
                 if (game.frinny) {
                     const avatarPanel = document.querySelector('.frinny-window .avatar-panel');
                     if (avatarPanel) {
                         avatarPanel.style.display = value ? 'flex' : 'none';
-                        console.log('Frinny | Updated avatar panel visibility');
+                        logStateChange('Avatar Panel', 'visibility updated', { visible: value });
                     }
                 }
             }
@@ -53,26 +53,26 @@ Hooks.once('ready', () => {
                 step: 10
             }
         });
-        console.log('Frinny | Registered module settings');
+        logStateChange('Settings', 'registered module settings');
 
         // Initialize the chat window
         game.frinny = new FrinnyChat();
-        console.log('Frinny | Created FrinnyChat instance');
+        logStateChange('FrinnyChat', 'instance created');
         
         // Restore window state if it was visible
         if (game.user.getFlag("frinny", "windowVisible")) {
             const pos = game.user.getFlag("frinny", "windowPosition");
             game.frinny.render(true, { left: pos?.left, top: pos?.top });
-            console.log('Frinny | Restored window state from flags');
+            logStateChange('Window', 'restored from flags', { position: pos });
         }
     } catch (error) {
-        console.error('Frinny | Error during module initialization:', error);
+        logError('module initialization', error);
     }
 });
 
 // Add the Frinny button to the basic controls
 Hooks.on('getSceneControlButtons', (controls) => {
-    console.log('Frinny | Adding scene control button');
+    logHookExecution('getSceneControlButtons', { module: 'frinny' });
     controls.push({
         name: 'frinny',
         title: 'Frinny Controls',
@@ -84,7 +84,7 @@ Hooks.on('getSceneControlButtons', (controls) => {
             icon: 'fas fa-comments',
             button: true,
             onClick: () => {
-                console.log('Frinny | Scene control button clicked');
+                logStateChange('Scene Control', 'button clicked');
                 game.frinny?.toggleWindow();
             }
         }]
@@ -93,14 +93,14 @@ Hooks.on('getSceneControlButtons', (controls) => {
 
 // Handle chat commands
 Hooks.on('chatMessage', (chatLog, message, chatData) => {
-    console.log('Frinny | chatMessage hook triggered:', {
+    logHookExecution('chatMessage', {
         message: message,
         userId: game.user.id
     });
 
     if (message.startsWith('!frinny')) {
         const query = message.slice(7).trim();
-        console.log('Frinny | Processing chat command:', {
+        logStateChange('Chat Command', 'processing', {
             query: query,
             userId: game.user.id
         });
@@ -108,7 +108,7 @@ Hooks.on('chatMessage', (chatLog, message, chatData) => {
         if (game.frinny) {
             game.frinny._handleMessageSend(query);
         } else {
-            console.warn('Frinny | game.frinny not initialized, cannot process chat command');
+            logHookSkip('chatMessage', 'game.frinny not initialized');
         }
         return false; // Prevent default chat message
     }

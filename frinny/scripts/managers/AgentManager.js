@@ -1,6 +1,9 @@
 /**
  * Manages all interactions with the Frinny AI backend service.
  */
+
+import { logBackendCommunication, logError } from '../utils/logUtils.js';
+
 export class AgentManager {
     constructor() {
         this.isConnected = false;
@@ -50,21 +53,33 @@ export class AgentManager {
 
             // Connection event handlers
             this.socket.on('connect', () => {
-                console.log('Frinny | Socket.IO connected');
+                logBackendCommunication('Socket.IO connection', true, {
+                    userId: this.userId
+                });
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
             });
 
             this.socket.on('disconnect', () => {
-                console.log('Frinny | Socket.IO disconnected');
+                logBackendCommunication('Socket.IO connection', false, {
+                    reason: 'disconnected',
+                    userId: this.userId
+                });
                 this.isConnected = false;
             });
 
             this.socket.on('connect_error', (error) => {
-                console.error('Frinny | Connection error:', error);
+                logError('Socket.IO connection', error, {
+                    userId: this.userId,
+                    attempt: this.reconnectAttempts + 1,
+                    maxAttempts: this.maxReconnectAttempts
+                });
                 this.reconnectAttempts++;
                 if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                    console.error('Frinny | Max reconnection attempts reached');
+                    logError('Socket.IO connection', new Error('Max reconnection attempts reached'), {
+                        userId: this.userId,
+                        attempts: this.reconnectAttempts
+                    });
                     this.socket.disconnect();
                 }
             });
@@ -109,7 +124,10 @@ export class AgentManager {
             });
 
             this.socket.on('error', (error) => {
-                console.error('Frinny | Server error:', error);
+                logError('Socket.IO server', error, {
+                    userId: this.userId,
+                    requestId: error.request_id
+                });
                 // Reject any pending promises for this request
                 if (error.request_id && this.messageCallbacks.has(error.request_id)) {
                     const callback = this.messageCallbacks.get(error.request_id);
@@ -119,7 +137,10 @@ export class AgentManager {
             });
 
         } catch (error) {
-            console.error('Frinny | Failed to connect:', error);
+            logError('Socket.IO initialization', error, {
+                userId: this.userId,
+                backendUrl: this.backendUrl
+            });
             this.isConnected = false;
             throw error;
         }
@@ -268,7 +289,8 @@ export class AgentManager {
             const response = await fetch(`${this.backendUrl}${endpoint}`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'User-Id': this.userId
                 },
                 body: JSON.stringify(data)
             });
@@ -279,7 +301,11 @@ export class AgentManager {
 
             return await response.json();
         } catch (error) {
-            console.error(`Frinny | Request to ${endpoint} failed:`, error);
+            logError('HTTP request', error, {
+                endpoint,
+                userId: this.userId,
+                ...data
+            });
             throw error;
         }
     }

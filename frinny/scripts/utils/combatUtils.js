@@ -3,6 +3,7 @@
  */
 
 import { canModifyCharacter, gatherCombatCharacterData } from './characterUtils.js';
+import { logStateChange } from './logUtils.js';
 
 /**
  * Validates if the current combat turn belongs to the user's character
@@ -11,13 +12,19 @@ import { canModifyCharacter, gatherCombatCharacterData } from './characterUtils.
  */
 export function isUserCharacterTurn(combat) {
     if (!combat?.started || !combat.current?.tokenId) {
-        console.log('Frinny | Combat validation failed: Combat not started or no current token');
+        logStateChange('Combat', 'validation failed', {
+            reason: 'Combat not started or no current token',
+            started: combat?.started,
+            currentTokenId: combat?.current?.tokenId
+        });
         return false;
     }
 
     const currentCombatant = combat.combatant;
     if (!currentCombatant) {
-        console.log('Frinny | Combat validation failed: No current combatant');
+        logStateChange('Combat', 'validation failed', {
+            reason: 'No current combatant'
+        });
         return false;
     }
 

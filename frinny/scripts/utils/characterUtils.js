@@ -2,6 +2,8 @@
  * Utility functions for gathering and validating character data
  */
 
+import { logPermission } from './logUtils.js';
+
 /**
  * Validates if a character can be modified by the current user
  * @param {Actor} actor - The character actor to validate
@@ -9,7 +11,8 @@
  */
 export function canModifyCharacter(actor) {
     if (!actor || actor.type !== 'character' || game.system.id !== 'pf2e') {
-        console.log('Frinny | Character validation failed: Invalid actor or system', {
+        logPermission('modify character', false, {
+            reason: 'Invalid actor or system',
             actorType: actor?.type,
             systemId: game.system.id
         });
@@ -21,7 +24,8 @@ export function canModifyCharacter(actor) {
 
     // For non-GMs, require explicit OWNER permission
     if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
-        console.log('Frinny | Character validation failed: User lacks explicit ownership', {
+        logPermission('modify character', false, {
+            reason: 'User lacks explicit ownership',
             actorId: actor.id,
             userId: game.user.id,
             permissionLevel: userPermissionLevel,
@@ -34,7 +38,8 @@ export function canModifyCharacter(actor) {
     if (isGM) {
         const designatedCharacter = game.user.character;
         if (!designatedCharacter || designatedCharacter.id !== actor.id) {
-            console.log('Frinny | Character validation failed: GM viewing non-designated character', {
+            logPermission('modify character', false, {
+                reason: 'GM viewing non-designated character',
                 actorId: actor.id,
                 designatedCharacterId: designatedCharacter?.id
             });
