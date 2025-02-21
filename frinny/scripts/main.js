@@ -72,7 +72,12 @@ Hooks.once('ready', () => {
 
 // Add the Frinny button to the basic controls
 Hooks.on('getSceneControlButtons', (controls) => {
-    logHookExecution('getSceneControlButtons', { module: 'frinny' });
+    logHookExecution('getSceneControlButtons', { 
+        module: 'frinny',
+        existingControls: controls.map(c => c.name),
+        currentScene: game.scenes?.current?.name || 'none'
+    });
+
     controls.push({
         name: 'frinny',
         title: 'Frinny Controls',
@@ -84,31 +89,54 @@ Hooks.on('getSceneControlButtons', (controls) => {
             icon: 'fas fa-comments',
             button: true,
             onClick: () => {
-                logStateChange('Scene Control', 'button clicked');
+                logStateChange('Scene Control', 'button clicked', {
+                    windowVisible: game.frinny?.rendered || false,
+                    userId: game.user.id,
+                    scene: game.scenes?.current?.name || 'none'
+                });
                 game.frinny?.toggleWindow();
             }
         }]
+    });
+
+    logStateChange('Scene Controls', 'Frinny controls added', {
+        totalControls: controls.length,
+        position: controls.length - 1
     });
 });
 
 // Handle chat commands
 Hooks.on('chatMessage', (chatLog, message, chatData) => {
     logHookExecution('chatMessage', {
+        messageLength: message.length,
+        userId: game.user.id,
+        isFrinnyCommand: message.startsWith('!Frinny'),
         message: message,
-        userId: game.user.id
+        chatLogId: chatLog.id,
+        chatDataType: chatData?.type || 'unknown'
     });
 
-    if (message.startsWith('!frinny')) {
+    if (message.startsWith('!Frinny')) {
         const query = message.slice(7).trim();
         logStateChange('Chat Command', 'processing', {
             query: query,
-            userId: game.user.id
+            userId: game.user.id,
+            timestamp: Date.now(),
+            isFrinnyInitialized: !!game.frinny
         });
 
         if (game.frinny) {
-            game.frinny._handleMessageSend(query);
+            game.frinny._handleMessageSend(query, true);
+            logStateChange('Chat Command', 'handled', {
+                success: true,
+                command: 'frinny',
+                queryLength: query.length
+            });
         } else {
-            logHookSkip('chatMessage', 'game.frinny not initialized');
+            logHookSkip('chatMessage', 'game.frinny not initialized', {
+                command: 'frinny',
+                userId: game.user.id
+            });
         }
         return false; // Prevent default chat message
     }
@@ -120,11 +148,22 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
         actor: app.actor.name,
         actorId: app.actor.id,
         type: app.actor.type,
-        systemId: game.system.id
+        systemId: game.system.id,
+        userId: game.user.id,
+        isOwner: app.actor.isOwner,
+        isEditable: app.isEditable,
+        windowId: app.id
     });
 
     // Validate character can be modified
     if (!canModifyCharacter(app.actor)) {
+        logHookSkip('renderActorSheet', 'Character cannot be modified', {
+            actor: app.actor.name,
+            actorId: app.actor.id,
+            type: app.actor.type,
+            userId: game.user.id,
+            permissionLevel: app.actor.getUserLevel(game.user)
+        });
         return;
     }
 
@@ -133,7 +172,10 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
         logHookExecution('characterCreation', {
             actor: app.actor.name,
             actorId: app.actor.id,
-            ownership: app.actor.ownership
+            ownership: app.actor.ownership,
+            userId: game.user.id,
+            systemId: game.system.id,
+            isFrinnyReady: !!game.frinny
         });
 
         try {
@@ -143,6 +185,12 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
                 items: gatherCharacterItems(app.actor, ['class', 'ancestry', 'background'])
             };
 
+            logStateChange('Character Creation', 'data gathered', {
+                actorId: app.actor.id,
+                dataFields: Object.keys(characterData),
+                itemCount: characterData.items.length
+            });
+
             // Store the context in user flags to track state
             await game.user.setFlag('frinny', 'characterCreation', {
                 actorId: app.actor.id,
@@ -151,13 +199,28 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
                 timestamp: Date.now()
             });
 
+            logStateChange('Character Creation', 'flags set', {
+                actorId: app.actor.id,
+                userId: game.user.id,
+                step: 'start'
+            });
+
             // Notify backend about new character creation
             await game.frinny.agentManager.notifyCharacterCreation(characterData);
 
             // Show Frinny's window
             await game.frinny.render(true);
+
+            logStateChange('Character Creation', 'process completed', {
+                actorId: app.actor.id,
+                success: true
+            });
         } catch (error) {
-            logError('character creation process', error);
+            logError('character creation process', error, {
+                actor: app.actor.name,
+                actorId: app.actor.id,
+                step: game.user.getFlag('frinny', 'characterCreation')?.step
+            });
         }
     }
 });

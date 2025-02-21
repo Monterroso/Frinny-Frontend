@@ -1,4 +1,5 @@
 import { AgentManager } from './AgentManager.js';
+import { logError, logStateChange } from '../utils/logUtils.js';
 
 export class FrinnyChat extends Application {
     static get defaultOptions() {
@@ -31,7 +32,7 @@ export class FrinnyChat extends Application {
 
         // Initialize connection and set up typing callback
         this.agentManager.connect().catch(error => {
-            console.error('Frinny | Failed to connect:', error);
+            logError('AgentManager connection', error);
         });
 
         // Set up typing status callback
@@ -183,31 +184,84 @@ export class FrinnyChat extends Application {
         });
     }
 
-    async _handleMessageSend(content) {
+    /**
+     * Handle sending a message to Frinny from the private chat window
+     * @param {string} content - The message content
+     * @private
+     */
+    async _handlePrivateMessage(content) {
         if (!content.trim()) return;
-
-        // Add user message
-        await this._addMessage({
-            type: 'user',
-            content: content,
-            timestamp: Date.now()
-        });
+        console.log('_handlePrivateMessage called', { content });
 
         try {
+            // Add user message to private chat
+            await this._addMessage({
+                type: 'user',
+                content: content,
+                timestamp: Date.now()
+            });
+
             // Get response from agent
-            const response = await this.agentManager.handleUserQuery(game.user.id, content);
+            console.log('Calling handlePrivateQuery');
+            const response = await this.agentManager.handlePrivateQuery(game.user.id, content);
+            console.log('Got response from handlePrivateQuery', response);
             
-            // Add response to messages
+            // Add response to private chat
             await this._addMessage(response);
         } catch (error) {
-            console.error('Frinny | Error getting response:', error);
-            // Add error message
-            await this._addMessage({
+            logError('getting AI response', error);
+            const errorMsg = {
                 type: 'assistant',
                 content: game.i18n.localize('frinny.error.failedResponse'),
                 timestamp: Date.now(),
                 showFeedback: false
+            };
+            await this._addMessage(errorMsg);
+        }
+    }
+
+    /**
+     * Handle sending a message to Frinny from the public chat
+     * @param {string} content - The message content
+     * @private
+     */
+    async _handlePublicMessage(content) {
+        if (!content.trim()) return;
+
+        try {
+            // Get response from agent
+            const response = await this.agentManager.handlePublicQuery(game.user.id, content);
+            
+            // Create Foundry chat message for Frinny's response
+            await ChatMessage.create({
+                content: response.content,
+                speaker: { alias: 'Frinny', img: 'modules/frinny/assets/images/default.png' },
+                type: CONST.CHAT_MESSAGE_TYPES.OTHER,
+                flavor: game.i18n.localize('frinny.chat.responsePrefix')
             });
+        } catch (error) {
+            logError('getting AI response', error);
+            // Show error in public chat
+            await ChatMessage.create({
+                content: game.i18n.localize('frinny.error.failedResponse'),
+                speaker: { alias: 'Frinny', img: 'modules/frinny/assets/images/default.png' },
+                type: CONST.CHAT_MESSAGE_TYPES.OTHER,
+                flavor: game.i18n.localize('frinny.chat.errorPrefix')
+            });
+        }
+    }
+
+    /**
+     * Route message handling based on source
+     * @param {string} content - The message content
+     * @param {boolean} isFromMainChat - Whether the message originated from the main chat
+     * @private
+     */
+    async _handleMessageSend(content, isFromMainChat = false) {
+        if (isFromMainChat) {
+            await this._handlePublicMessage(content);
+        } else {
+            await this._handlePrivateMessage(content);
         }
     }
 
@@ -221,7 +275,7 @@ export class FrinnyChat extends Application {
                 feedbackError: false
             });
         } catch (error) {
-            console.error('Frinny | Error submitting feedback:', error);
+            logError('submitting feedback', error);
             
             // Update the message with error state
             await this._updateMessage(messageId, {

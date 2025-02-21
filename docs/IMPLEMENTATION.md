@@ -78,39 +78,75 @@ activateListeners(html)
 - Handles feedback buttons
 - Manages message submission
 
-async _handleMessageSend(content)
-- Processes user messages
-- Shows typing indicator
-- Triggers AI response via AgentManager
-- Handles errors gracefully
-- Updates chat interface
+async _handleMessageSend(content, isFromMainChat = false)
+- Routes messages to appropriate handler based on source
+- Supports both private and public chat contexts
+- Updates UI state accordingly
+
+async _handlePrivateMessage(content)
+- Processes messages in private chat window
+- Updates message history
+- Handles errors with localized messages
+
+async _handlePublicMessage(content)
+- Processes messages in Foundry's main chat
+- Creates formatted chat messages
+- Handles errors with localized messages
 
 async _handleFeedback(messageId, type)
 - Submits message feedback
 - Updates feedback UI state
-- Handles submission errors
+- Handles submission errors with logging
 ```
 
 ### 2. AgentManager.js
 Handles all interactions with the AI backend service.
 
 #### Key Features:
-- Manages WebSocket connections
-- Handles message processing
+- Manages WebSocket connections with robust error handling
+- Handles message processing for both private and public chats
 - Provides feedback submission
 - Supports character creation
 - Offers combat suggestions
+- Monitors request health and timeouts
+- Implements automatic cleanup of stale requests
 
 #### Important Methods:
 ```javascript
 async connect()
 - Establishes WebSocket connection
-- Handles connection state
+- Sets up error handlers
+- Initializes request monitoring
 
-async handleUserQuery(userId, content)
-- Processes user messages
-- Returns AI responses
-- Manages message IDs
+_startRequestMonitoring()
+- Monitors pending requests for timeouts
+- Logs request health metrics
+- Cleans up stale requests
+
+async handlePrivateQuery(userId, content)
+- Processes private chat messages
+- Maintains conversation history
+- Returns AI responses with context
+
+async handlePublicQuery(userId, content)
+- Processes public chat messages
+- Includes scene and combat context
+- Returns formatted responses for main chat
+
+_handleSocketResponse(requestId, data)
+- Processes successful responses
+- Cleans up request resources
+- Triggers appropriate callbacks
+
+_handleSocketError(requestId, error)
+- Handles socket-level errors
+- Provides detailed error logging
+- Cleans up affected requests
+
+async _emitAndWait(eventName, data)
+- Sends socket events with timeout handling
+- Manages request lifecycle
+- Provides detailed error context
 
 async submitFeedback(messageId, type)
 - Handles feedback submission
@@ -129,11 +165,11 @@ async getCombatSuggestions(combatState)
 Module initialization and Foundry VTT integration.
 
 #### Key Features:
-- Registers module hooks
+- Registers module hooks with enhanced logging
 - Sets up module settings
 - Initializes chat interface
 - Adds UI controls
-- Handles chat commands
+- Handles chat commands with improved error handling
 
 #### Important Hooks:
 ```javascript
@@ -149,10 +185,13 @@ Hooks.once('ready')
 Hooks.on('getSceneControlButtons')
 - Adds Frinny button to scene controls
 - Provides window toggle functionality
+- Includes detailed state logging
 
 Hooks.on('chatMessage')
-- Handles !frinny chat commands
-- Routes messages to chat interface
+- Handles !Frinny chat commands (case-sensitive)
+- Routes messages to appropriate handler
+- Includes comprehensive error handling
+- Logs message processing state
 ```
 
 ### 4. frinny-chat.hbs
