@@ -205,11 +205,20 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
                 step: 'start'
             });
 
-            // Notify backend about new character creation
-            await game.frinny.agentManager.notifyCharacterCreation(characterData);
+            // Notify backend about new character creation and get response
+            const response = await game.frinny.agentManager.notifyCharacterCreation(characterData);
 
             // Show Frinny's window
             await game.frinny.render(true);
+
+            // Add response to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: response.message,
+                timestamp: Date.now(),
+                showFeedback: true,
+                messageId: response.messageId
+            });
 
             logStateChange('Character Creation', 'process completed', {
                 actorId: app.actor.id,
@@ -220,6 +229,14 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
                 actor: app.actor.name,
                 actorId: app.actor.id,
                 step: game.user.getFlag('frinny', 'characterCreation')?.step
+            });
+            
+            // Add error message to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: game.i18n.localize('frinny.error.failedResponse'),
+                timestamp: Date.now(),
+                showFeedback: false
             });
         }
     }
@@ -254,15 +271,31 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
                 // Gather combat state data using utility function
                 const combatData = gatherCombatStateData(combat, userCharacter);
                 
-                // Notify backend about combat start
-                await game.frinny.agentManager.notifyCombatStart(combatData);
+                // Notify backend about combat start and get response
+                const response = await game.frinny.agentManager.notifyCombatStart(combatData);
 
                 // Show Frinny's window if it's not already visible
                 if (!game.frinny.rendered) {
                     await game.frinny.render(true);
                 }
+
+                // Add response to private chat
+                await game.frinny._addMessage({
+                    type: 'assistant',
+                    content: response.message,
+                    timestamp: Date.now(),
+                    showFeedback: true,
+                    messageId: response.messageId
+                });
             } catch (error) {
                 logError('combat start processing', error);
+                // Add error message to private chat
+                await game.frinny._addMessage({
+                    type: 'assistant',
+                    content: game.i18n.localize('frinny.error.failedResponse'),
+                    timestamp: Date.now(),
+                    showFeedback: false
+                });
             }
         } else {
             logHookSkip('combatStart', 'game.frinny not initialized');
@@ -291,15 +324,31 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
                 allies: getVisibleAllies(combat, userCharacter)
             };
 
-            // Notify backend about combat turn
-            await game.frinny.agentManager.notifyCombatTurn(combatData);
+            // Notify backend about combat turn and get response
+            const response = await game.frinny.agentManager.notifyCombatTurn(combatData);
 
             // Show Frinny's window if it's not already visible
             if (!game.frinny.rendered) {
                 await game.frinny.render(true);
             }
+
+            // Add response to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: response.message,
+                timestamp: Date.now(),
+                showFeedback: true,
+                messageId: response.messageId
+            });
         } catch (error) {
             logError('combat turn processing', error);
+            // Add error message to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: game.i18n.localize('frinny.error.failedResponse'),
+                timestamp: Date.now(),
+                showFeedback: false
+            });
         }
     } else {
         logHookSkip('updateCombat', 'game.frinny not initialized');
@@ -331,7 +380,6 @@ Hooks.on('updateActor', async (actor, changes, options, userId) => {
     }
 
     // Get the previous level from flags or from the current actor state
-    // const previousLevel = await actor.getFlag('frinny', 'lastLevel') || actor.system.details.level.value;
     const previousLevel = await actor.getFlag('frinny', 'lastLevel') || actor.system.details.level.value - 1;
     logStateChange('character', 'Level change detected', {
         previousLevel,
@@ -360,13 +408,29 @@ Hooks.on('updateActor', async (actor, changes, options, userId) => {
             await actor.setFlag('frinny', 'lastLevel', levelChange);
             logStateChange('flags', 'Stored new level');
 
-            // Notify backend about level up
-            await game.frinny.agentManager.notifyLevelUp(levelUpData);
+            // Notify backend about level up and get response
+            const response = await game.frinny.agentManager.notifyLevelUp(levelUpData);
 
             // Show Frinny's window
             await game.frinny.render(true);
+
+            // Add response to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: response.message,
+                timestamp: Date.now(),
+                showFeedback: true,
+                messageId: response.messageId
+            });
         } catch (error) {
             logError('level up processing', error);
+            // Add error message to private chat
+            await game.frinny._addMessage({
+                type: 'assistant',
+                content: game.i18n.localize('frinny.error.failedResponse'),
+                timestamp: Date.now(),
+                showFeedback: false
+            });
         }
     } else {
         logHookSkip('levelUp', 'game.frinny not initialized');
