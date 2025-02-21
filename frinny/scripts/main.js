@@ -330,8 +330,9 @@ Hooks.on('updateActor', async (actor, changes, options, userId) => {
         return;
     }
 
-    // Get the previous level from flags or default to current level
-    const previousLevel = await actor.getFlag('frinny', 'lastLevel') || levelChange;
+    // Get the previous level from flags or from the current actor state
+    // const previousLevel = await actor.getFlag('frinny', 'lastLevel') || actor.system.details.level.value;
+    const previousLevel = await actor.getFlag('frinny', 'lastLevel') || actor.system.details.level.value - 1;
     logStateChange('character', 'Level change detected', {
         previousLevel,
         newLevel: levelChange,
