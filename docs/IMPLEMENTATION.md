@@ -226,13 +226,38 @@ getVisibleAllies(combat, currentActor)   // Gets ally data
 Provides consistent logging across the module:
 
 ```javascript
-logHookExecution(hookName, context)  // Logs hook triggers
-logHookSkip(hookName, reason, context)  // Logs skipped operations
-logError(action, error, context)  // Logs errors with context
-logStateChange(component, change, context)  // Logs state changes
-logPermission(action, allowed, context)  // Logs permission checks
-logBackendCommunication(action, success, context)  // Logs API calls
+// Log Level Enum
+LogLevel = {
+    DEBUG: 'debug',
+    INFO: 'info',
+    WARN: 'warn',
+    ERROR: 'error'
+}
+
+// Core Logging Functions
+baseLog(level, message, context)  // Base logging with consistent formatting
+logHookExecution(hookName, context)  // Logs hook triggers with context
+logHookSkip(hookName, reason, context)  // Logs skipped hook operations
+logError(action, error, context)  // Logs errors with full stack traces
+logStateChange(component, change, context)  // Logs UI and game state changes
+logPermission(action, allowed, context)  // Logs permission decisions
+logBackendCommunication(action, success, context)  // Logs API/Socket.IO communication
 logPerformance(action, duration, context)  // Logs performance metrics
+```
+
+Usage patterns:
+- Hook Execution: `logHookExecution('renderActorSheet', { actor, type, systemId })`
+- Permission Checks: `logPermission('modify character', false, { reason, actorType })`
+- State Changes: `logStateChange('Combat', 'validation failed', { reason })`
+- Backend Communication: `logBackendCommunication('Socket.IO connection', true, { userId })`
+- Error Handling: `logError('Socket.IO initialization', error, { userId, backendUrl })`
+
+Benefits:
+- Consistent "Frinny |" prefix across all logs
+- Structured context objects for better debugging
+- Proper error stack traces and contexts
+- Categorized logging by type (hooks, permissions, state, etc.)
+- Centralized logging control
 ```
 
 ### Code Organization
