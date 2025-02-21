@@ -1,4 +1,16 @@
 import { FrinnyChat } from './managers/UIManager.js';
+import { 
+    canModifyCharacter, 
+    isNewCharacter, 
+    gatherBasicCharacterData, 
+    gatherCharacterItems,
+    gatherLevelUpData,
+    getLevelChange,
+    isValidLevelUp,
+    hasLevelIncreased
+} from './utils/characterUtils.js';
+import { logHookExecution, logHookSkip, logError, logStateChange } from './utils/logUtils.js';
+import { isUserCharacterTurn, gatherCombatStateData, isCombatStarting, getVisibleEnemies, getVisibleAllies } from './utils/combatUtils.js';
 
 Hooks.once('init', () => {
     console.log('Frinny | Initializing module');
@@ -104,80 +116,31 @@ Hooks.on('chatMessage', (chatLog, message, chatData) => {
 
 // Handle new character sheets
 Hooks.on('renderActorSheet', async (app, html, data) => {
-    console.log('Frinny | renderActorSheet hook triggered:', {
+    logHookExecution('renderActorSheet', {
         actor: app.actor.name,
         actorId: app.actor.id,
         type: app.actor.type,
         systemId: game.system.id
     });
 
-    // Only proceed if it's a PF2E character sheet
-    if (!(app.actor.type === 'character' && game.system.id === 'pf2e')) {
-        console.log('Frinny | renderActorSheet hook skipped: Not a PF2E character', {
-            actorType: app.actor.type,
-            systemId: game.system.id
-        });
+    // Validate character can be modified
+    if (!canModifyCharacter(app.actor)) {
         return;
     }
 
-    // Get the user's permission level for this actor
-    const userPermissionLevel = app.actor.getUserLevel(game.user);
-    const isGM = game.user.isGM;
-    
-    console.log('Frinny | Checking character ownership:', {
-        actorId: app.actor.id,
-        userId: game.user.id,
-        isGM: isGM,
-        permissionLevel: userPermissionLevel,
-        ownership: app.actor.ownership
-    });
-
-    // If user is not GM, ensure they have explicit OWNER permission
-    if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
-        console.log('Frinny | renderActorSheet hook skipped: User lacks explicit ownership', {
-            actorId: app.actor.id,
-            userId: game.user.id,
-            permissionLevel: userPermissionLevel,
-            requiredLevel: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
-        });
-        return;
-    }
-
-    // For GMs, check if they're the designated owner of this character
-    if (isGM) {
-        const designatedCharacter = game.user.character;
-        if (!designatedCharacter || designatedCharacter.id !== app.actor.id) {
-            console.log('Frinny | renderActorSheet hook skipped: GM viewing non-designated character', {
-                actorId: app.actor.id,
-                designatedCharacterId: designatedCharacter?.id
-            });
-            return;
-        }
-    }
-
-    // Check if this is a new character (no class, no ancestry, no background)
-    const isNewCharacter = !app.actor.items.find(i => i.type === 'class' || i.type === 'ancestry' || i.type === 'background');
-    
-    if (isNewCharacter && game.frinny) {
-        console.log('Frinny | New character detected, starting character creation:', {
+    // Check if this is a new character
+    if (isNewCharacter(app.actor) && game.frinny) {
+        logHookExecution('characterCreation', {
             actor: app.actor.name,
             actorId: app.actor.id,
             ownership: app.actor.ownership
         });
 
         try {
-            // Gather initial character state
+            // Gather initial character state using utility functions
             const characterData = {
-                actorId: app.actor.id,
-                userId: game.user.id,
-                name: app.actor.name,
-                abilities: app.actor.system.abilities,
-                skills: app.actor.system.skills,
-                items: app.actor.items.map(i => ({
-                    id: i.id,
-                    name: i.name,
-                    type: i.type
-                }))
+                ...gatherBasicCharacterData(app.actor),
+                items: gatherCharacterItems(app.actor, ['class', 'ancestry', 'background'])
             };
 
             // Store the context in user flags to track state
@@ -187,24 +150,21 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
                 step: 'start',
                 timestamp: Date.now()
             });
-            console.log('Frinny | Stored character creation state in flags');
 
             // Notify backend about new character creation
             await game.frinny.agentManager.notifyCharacterCreation(characterData);
-            console.log('Frinny | Successfully notified backend about character creation');
 
             // Show Frinny's window
             await game.frinny.render(true);
-            console.log('Frinny | Rendered Frinny window');
         } catch (error) {
-            console.error('Frinny | Error during character creation process:', error);
+            logError('character creation process', error);
         }
     }
 });
 
 // Handle combat start and turns
 Hooks.on('updateCombat', async (combat, changed, options, userId) => {
-    console.log('Frinny | updateCombat hook triggered:', {
+    logHookExecution('updateCombat', {
         round: combat.round,
         turn: combat.turn,
         userId: userId,
@@ -213,230 +173,79 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
     });
 
     // Check if this update is the combat starting
-    const isCombatStarting = changed.round === 1 && changed.turn === 0 && combat.started && !options.direction;
-    
-    if (isCombatStarting) {
-        console.log('Frinny | Combat is starting');
-        
-        // Check if the user has a valid character in combat
+    if (isCombatStarting(combat, changed, options)) {
+        logHookExecution('combatStart', {
+            round: combat.round,
+            turn: combat.turn
+        });
+
+        // Get the user's character
         const userCharacter = game.user.character;
-        const userCombatant = combat.turns.find(t => 
-            t.actor?.id === userCharacter?.id && 
-            t.actor.type === 'character' && 
-            game.system.id === 'pf2e'
-        );
-
-        if (!userCombatant) {
-            console.log('Frinny | Combat start skipped: No valid user character in combat', {
-                userCharacterId: userCharacter?.id,
-                systemId: game.system.id
-            });
-            return;
-        }
-
-        // Verify character ownership
-        const userPermissionLevel = userCombatant.actor.getUserLevel(game.user);
-        const isGM = game.user.isGM;
-
-        // For non-GMs, require explicit OWNER permission
-        if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
-            console.log('Frinny | Combat start skipped: User lacks explicit ownership', {
-                actorId: userCombatant.actor.id,
-                userId: game.user.id,
-                permissionLevel: userPermissionLevel,
-                requiredLevel: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
-            });
-            return;
-        }
-
-        // For GMs, ensure this is their designated character
-        if (isGM && userCharacter?.id !== userCombatant.actor.id) {
-            console.log('Frinny | Combat start skipped: GM viewing non-designated character', {
-                actorId: userCombatant.actor.id,
-                designatedCharacterId: userCharacter?.id
-            });
+        if (!userCharacter || !canModifyCharacter(userCharacter)) {
+            logHookSkip('combatStart', 'No valid user character in combat');
             return;
         }
 
         if (game.frinny) {
-            console.log('Frinny | Processing combat start for character:', {
-                name: userCombatant.actor.name,
-                round: combat.round,
-                turn: combat.turn
-            });
-
             try {
-                // Gather combat state data
-                const combatData = {
-                    combatId: combat.id,
-                    userId: game.user.id,
-                    round: combat.round,
-                    turn: combat.turn,
-                    // Current character state
-                    character: {
-                        name: userCombatant.actor.name,
-                        hp: userCombatant.actor.system.attributes.hp,
-                        ac: userCombatant.actor.system.attributes.ac,
-                        abilities: userCombatant.actor.system.abilities,
-                        skills: userCombatant.actor.system.skills,
-                        items: userCombatant.actor.items.map(i => ({
-                            id: i.id,
-                            name: i.name,
-                            type: i.type
-                        }))
-                    },
-                    // Get all combatants with initiative
-                    combatants: combat.turns.map(t => ({
-                        id: t.id,
-                        name: t.name,
-                        initiative: t.initiative,
-                        isAlly: t.actor?.hasPlayerOwner,
-                        isEnemy: !t.actor?.hasPlayerOwner,
-                        hp: t.actor?.system.attributes.hp,
-                        ac: t.actor?.system.attributes.ac,
-                        // Add other relevant combatant data
-                    }))
-                };
-
+                // Gather combat state data using utility function
+                const combatData = gatherCombatStateData(combat, userCharacter);
+                
                 // Notify backend about combat start
                 await game.frinny.agentManager.notifyCombatStart(combatData);
-                console.log('Frinny | Successfully notified backend about combat start');
 
                 // Show Frinny's window if it's not already visible
                 if (!game.frinny.rendered) {
                     await game.frinny.render(true);
-                    console.log('Frinny | Rendered Frinny window');
                 }
             } catch (error) {
-                console.error('Frinny | Error during combat start processing:', error);
+                logError('combat start processing', error);
             }
         } else {
-            console.warn('Frinny | game.frinny not initialized, skipping combat start processing');
+            logHookSkip('combatStart', 'game.frinny not initialized');
         }
         return;
     }
 
     // Handle regular turn updates
-    // Only proceed if we're in combat
-    if (!combat.started || !combat.current?.tokenId) {
-        console.log('Frinny | Turn update skipped: Combat not started or no current token');
-        return;
-    }
-    
-    // Get the current combatant
-    const currentCombatant = combat.combatant;
-    if (!currentCombatant) {
-        console.log('Frinny | updateCombat hook skipped: No current combatant');
+    if (!isUserCharacterTurn(combat)) {
+        logHookSkip('updateCombat', 'Not user\'s character turn');
         return;
     }
 
-    // Check if the user has a valid character that's currently up
     const userCharacter = game.user.character;
-    const isCurrentCharacter = currentCombatant.actor?.id === userCharacter?.id && 
-                             currentCombatant.actor.type === 'character' && 
-                             game.system.id === 'pf2e';
-
-    if (!isCurrentCharacter) {
-        console.log('Frinny | updateCombat hook skipped: Not user\'s character turn', {
-            currentActorId: currentCombatant.actor?.id,
-            userCharacterId: userCharacter?.id,
-            systemId: game.system.id
-        });
-        return;
-    }
-
-    // Verify character ownership
-    const userPermissionLevel = currentCombatant.actor.getUserLevel(game.user);
-    const isGM = game.user.isGM;
-
-    // For non-GMs, require explicit OWNER permission
-    if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
-        console.log('Frinny | updateCombat hook skipped: User lacks explicit ownership', {
-            actorId: currentCombatant.actor.id,
-            userId: game.user.id,
-            permissionLevel: userPermissionLevel,
-            requiredLevel: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
-        });
-        return;
-    }
-
-    // For GMs, ensure this is their designated character
-    if (isGM && userCharacter?.id !== currentCombatant.actor.id) {
-        console.log('Frinny | updateCombat hook skipped: GM viewing non-designated character', {
-            actorId: currentCombatant.actor.id,
-            designatedCharacterId: userCharacter?.id
-        });
+    if (!canModifyCharacter(userCharacter)) {
+        logHookSkip('updateCombat', 'Character cannot be modified');
         return;
     }
 
     if (game.frinny) {
-        console.log('Frinny | Processing combat turn for character:', {
-            name: currentCombatant.actor.name,
-            round: combat.round,
-            turn: combat.turn
-        });
-
         try {
-            // Gather combat state data
+            // Gather combat state data using utility functions
             const combatData = {
-                actorId: currentCombatant.actor.id,
-                userId: game.user.id,
-                round: combat.round,
-                turn: combat.turn,
-                // Current character state
-                character: {
-                    name: currentCombatant.actor.name,
-                    hp: currentCombatant.actor.system.attributes.hp,
-                    ac: currentCombatant.actor.system.attributes.ac,
-                    abilities: currentCombatant.actor.system.abilities,
-                    skills: currentCombatant.actor.system.skills,
-                    items: currentCombatant.actor.items.map(i => ({
-                        id: i.id,
-                        name: i.name,
-                        type: i.type
-                    }))
-                },
-                // Get visible enemies
-                enemies: combat.turns
-                    .filter(t => !t.actor?.hasPlayerOwner && t.actor?.id !== currentCombatant.actor.id)
-                    .map(t => ({
-                        id: t.id,
-                        name: t.name,
-                        hp: t.actor?.system.attributes.hp,
-                        ac: t.actor?.system.attributes.ac,
-                        // Add other relevant enemy data
-                    })),
-                // Get visible allies
-                allies: combat.turns
-                    .filter(t => t.actor?.hasPlayerOwner && t.actor?.id !== currentCombatant.actor.id)
-                    .map(t => ({
-                        id: t.id,
-                        name: t.name,
-                        hp: t.actor?.system.attributes.hp,
-                        // Add other relevant ally data
-                    }))
+                ...gatherCombatStateData(combat, userCharacter),
+                enemies: getVisibleEnemies(combat, userCharacter),
+                allies: getVisibleAllies(combat, userCharacter)
             };
 
             // Notify backend about combat turn
             await game.frinny.agentManager.notifyCombatTurn(combatData);
-            console.log('Frinny | Successfully notified backend about combat turn');
 
             // Show Frinny's window if it's not already visible
             if (!game.frinny.rendered) {
                 await game.frinny.render(true);
-                console.log('Frinny | Rendered Frinny window');
             }
         } catch (error) {
-            console.error('Frinny | Error during combat turn processing:', error);
+            logError('combat turn processing', error);
         }
     } else {
-        console.warn('Frinny | game.frinny not initialized, skipping combat turn processing');
+        logHookSkip('updateCombat', 'game.frinny not initialized');
     }
 });
 
 // Handle level up events
 Hooks.on('updateActor', async (actor, changes, options, userId) => {
-    console.log('Frinny | updateActor hook triggered:', {
+    logHookExecution('updateActor', {
         actor: actor.name,
         actorId: actor.id,
         userId: userId,
@@ -445,109 +254,57 @@ Hooks.on('updateActor', async (actor, changes, options, userId) => {
         systemId: game.system.id
     });
 
-    // Only proceed if it's a PF2E character and it's our character
-    if (!(actor.type === 'character' && game.system.id === 'pf2e')) {
-        console.log('Frinny | updateActor hook skipped: Not a PF2E character', {
-            actorType: actor.type,
-            systemId: game.system.id
-        });
-        return;
-    }
-    
-    if (actor.id !== game.user.character?.id) {
-        console.log('Frinny | updateActor hook skipped: Not user\'s character', {
-            actorId: actor.id,
-            userCharacterId: game.user.character?.id
-        });
+    // Validate this is a level up event for our character
+    if (!isValidLevelUp(actor)) {
+        logHookSkip('updateActor', 'Not a valid level up event for user\'s character');
         return;
     }
 
-    // Check if level has increased
-    const levelChange = changes.system?.details?.level?.value;
+    // Check if level has changed
+    const levelChange = getLevelChange(changes);
     if (!levelChange) {
-        console.log('Frinny | updateActor hook skipped: No level change detected', {
-            changes: changes
-        });
+        logHookSkip('updateActor', 'No level change detected');
         return;
     }
 
     // Get the previous level from flags or default to current level
     const previousLevel = await actor.getFlag('frinny', 'lastLevel') || levelChange;
-    console.log('Frinny | Level change detected:', {
-        previousLevel: previousLevel,
+    logStateChange('character', 'Level change detected', {
+        previousLevel,
         newLevel: levelChange,
         actor: actor.name
     });
     
     // Only proceed if level has increased
-    if (levelChange <= previousLevel) {
-        console.log('Frinny | updateActor hook skipped: Level has not increased', {
-            previousLevel: previousLevel,
-            newLevel: levelChange
-        });
+    if (!hasLevelIncreased(levelChange, previousLevel)) {
+        logHookSkip('updateActor', 'Level has not increased');
         return;
     }
 
     if (game.frinny) {
-        console.log('Frinny | Processing level up for character:', {
+        logHookExecution('levelUp', {
             name: actor.name,
-            previousLevel: previousLevel,
+            previousLevel,
             newLevel: levelChange
         });
 
-        // Gather level up state data
-        const levelUpData = {
-            actorId: actor.id,
-            userId: game.user.id,
-            previousLevel: previousLevel,
-            newLevel: levelChange,
-            character: {
-                // Basic information
-                name: actor.name,
-                level: levelChange,
-                // Core attributes and statistics
-                attributes: actor.system.attributes,
-                abilities: actor.system.abilities,
-                saves: actor.system.saves,
-                skills: actor.system.skills,
-                // Resources and points
-                resources: actor.system.resources,
-                details: actor.system.details,
-                // All items categorized by type
-                items: Object.fromEntries(
-                    ['feat', 'action', 'spell', 'class', 'ancestry', 'background', 'heritage', 'equipment']
-                    .map(type => [type, actor.items.filter(i => i.type === type)
-                        .map(i => ({
-                            id: i.id,
-                            name: i.name,
-                            type: i.type,
-                            system: i.system
-                        }))
-                    ])
-                ),
-                // Additional PF2e specific data
-                martial: actor.system.martial,
-                proficiencies: actor.system.proficiencies,
-                traits: actor.system.traits
-            }
-        };
-
         try {
+            // Gather level up data using utility function
+            const levelUpData = gatherLevelUpData(actor, previousLevel, levelChange);
+
             // Store the new level in flags
             await actor.setFlag('frinny', 'lastLevel', levelChange);
-            console.log('Frinny | Stored new level in flags:', levelChange);
+            logStateChange('flags', 'Stored new level');
 
             // Notify backend about level up
             await game.frinny.agentManager.notifyLevelUp(levelUpData);
-            console.log('Frinny | Successfully notified backend about level up');
 
             // Show Frinny's window
             await game.frinny.render(true);
-            console.log('Frinny | Rendered Frinny window');
         } catch (error) {
-            console.error('Frinny | Error during level up processing:', error);
+            logError('level up processing', error);
         }
     } else {
-        console.warn('Frinny | game.frinny not initialized, skipping level up processing');
+        logHookSkip('levelUp', 'game.frinny not initialized');
     }
 }); 

@@ -10,6 +10,10 @@ frinny/
 │   ├── managers/
 │   │   ├── UIManager.js     # Core UI handling
 │   │   └── AgentManager.js  # AI interaction handling
+│   ├── utils/
+│   │   ├── characterUtils.js
+│   │   ├── combatUtils.js
+│   │   └── logUtils.js
 │   └── main.js             # Module entry point
 ├── styles/
 │   └── frinny-chat.css     # UI styling
@@ -185,6 +189,100 @@ Localization file for UI text.
 - Button labels
 - Feedback messages
 - Error messages
+
+### 2. Utility Functions
+The module now includes a comprehensive set of utility functions organized by domain:
+
+#### characterUtils.js
+Handles all character-related operations and data gathering:
+
+```javascript
+// Character Validation
+canModifyCharacter(actor)      // Validates if character can be modified
+isNewCharacter(actor)          // Checks if character is new
+isValidLevelUp(actor)         // Validates level up event
+hasLevelIncreased(newLevel, previousLevel)  // Checks level increase
+
+// Data Gathering
+gatherBasicCharacterData(actor)    // Gets common character data
+gatherCharacterItems(actor, itemTypes)  // Gets categorized item data
+gatherCombatCharacterData(actor)   // Gets combat-specific data
+gatherLevelUpData(actor, previousLevel, newLevel)  // Gets level up data
+getLevelChange(changes)       // Extracts level change from update
+```
+
+#### combatUtils.js
+Manages combat-related functionality:
+
+```javascript
+isUserCharacterTurn(combat)    // Validates user's turn
+isCombatStarting(combat, changed, options)  // Checks combat start
+gatherCombatStateData(combat, actor)  // Gets combat state
+getVisibleEnemies(combat, currentActor)  // Gets enemy data
+getVisibleAllies(combat, currentActor)   // Gets ally data
+```
+
+#### logUtils.js
+Provides consistent logging across the module:
+
+```javascript
+logHookExecution(hookName, context)  // Logs hook triggers
+logHookSkip(hookName, reason, context)  // Logs skipped operations
+logError(action, error, context)  // Logs errors with context
+logStateChange(component, change, context)  // Logs state changes
+logPermission(action, allowed, context)  // Logs permission checks
+logBackendCommunication(action, success, context)  // Logs API calls
+logPerformance(action, duration, context)  // Logs performance metrics
+```
+
+### Code Organization
+The module now follows a more structured organization:
+
+```
+frinny/
+├── scripts/
+│   ├── managers/
+│   │   ├── UIManager.js
+│   │   └── AgentManager.js
+│   ├── utils/
+│   │   ├── characterUtils.js
+│   │   ├── combatUtils.js
+│   │   └── logUtils.js
+│   └── main.js
+```
+
+### Event Handling
+Events are now processed using utility functions for better maintainability:
+
+1. Character Creation
+   - Uses `isNewCharacter` and `canModifyCharacter` for validation
+   - Gathers data using `gatherBasicCharacterData` and `gatherCharacterItems`
+   - Consistent logging through `logUtils`
+
+2. Combat
+   - Combat start detection with `isCombatStarting`
+   - Turn validation using `isUserCharacterTurn`
+   - Data gathering with `gatherCombatStateData`
+   - Enemy/Ally tracking with dedicated utility functions
+
+3. Level Up
+   - Validation through `isValidLevelUp` and `hasLevelIncreased`
+   - Level change detection with `getLevelChange`
+   - Data gathering using `gatherLevelUpData`
+
+### Logging System
+Implemented a comprehensive logging system that:
+- Uses consistent prefix ("Frinny |")
+- Provides context-aware logging
+- Supports different log levels (DEBUG, INFO, WARN, ERROR)
+- Includes specialized logging for different operations
+
+### State Management
+Improved state tracking with:
+- Dedicated utility functions for data gathering
+- Consistent state change logging
+- Better error handling and reporting
+- Clear validation chains
 
 ## State Management
 
