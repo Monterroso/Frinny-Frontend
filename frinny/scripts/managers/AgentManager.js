@@ -100,6 +100,14 @@ export class AgentManager {
                 }
             });
 
+            this.socket.on('level_up_response', (data) => {
+                const callback = this.messageCallbacks.get(data.request_id);
+                if (callback) {
+                    callback(data);
+                    this.messageCallbacks.delete(data.request_id);
+                }
+            });
+
             this.socket.on('error', (error) => {
                 console.error('Frinny | Server error:', error);
                 // Reject any pending promises for this request
@@ -200,6 +208,24 @@ export class AgentManager {
         } catch (error) {
             if (error.message === 'Socket.IO not connected') {
                 return await this._sendRequest('/api/combat/suggest', combatState);
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Notify backend about level up
+     * @param {Object} levelUpData - The level up context data
+     */
+    async notifyLevelUp(levelUpData) {
+        try {
+            if (this.isConnected) {
+                return await this._emitAndWait('level_up', levelUpData);
+            }
+            return await this._sendRequest('/api/character/level-up', levelUpData);
+        } catch (error) {
+            if (error.message === 'Socket.IO not connected') {
+                return await this._sendRequest('/api/character/level-up', levelUpData);
             }
             throw error;
         }
