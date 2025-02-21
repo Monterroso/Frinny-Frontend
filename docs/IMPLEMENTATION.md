@@ -284,11 +284,86 @@ Needed test coverage:
    - Permission management
    - Data sanitization
 
-2. API Integration
-   - Secure WebSocket connections
-   - API key management
-   - Rate limiting
-   - Error handling
+2. Permission Management
+   - Explicit ownership checks using Foundry's permission levels
+   - Special handling for GM users
+   - Designated character validation
+   - Prevention of unauthorized character modifications
+   - Permission level constants from CONST.DOCUMENT_OWNERSHIP_LEVELS
+   - Proper handling of system-specific permission defaults
+
+3. Logging System
+   - Structured logging with consistent "Frinny |" prefix
+   - Detailed context objects for debugging
+   - Explicit success/failure logging
+   - Hook execution tracking
+   - Permission decision logging
+   - Error state capture
+   - Performance monitoring
+   - State change tracking
+
+## Logging Guidelines
+1. Hook Execution
+   - Log when hooks are triggered with relevant context
+   - Log skip conditions with clear reasoning
+   - Include user and character IDs where relevant
+   - Track ownership and permission states
+
+2. State Changes
+   - Log UI state changes (window position, visibility)
+   - Track character sheet modifications
+   - Monitor combat state transitions
+   - Record backend communication status
+
+3. Error Handling
+   - Structured error logging with full context
+   - Clear error messages for debugging
+   - Stack traces for critical errors
+   - Recovery attempt logging
+   - User-facing error state management
+
+4. Debug Information
+   - Permission levels and ownership details
+   - Character state changes
+   - Combat turn processing
+   - Backend communication status
+   - UI state transitions
+
+## Permission Implementation
+1. Character Sheet Access
+   ```javascript
+   // Get user's permission level
+   const userPermissionLevel = actor.getUserLevel(game.user);
+   const isGM = game.user.isGM;
+
+   // Check explicit ownership for non-GM users
+   if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
+       return; // Skip if not explicit owner
+   }
+
+   // For GMs, validate designated character
+   if (isGM) {
+       const designatedCharacter = game.user.character;
+       if (!designatedCharacter || designatedCharacter.id !== actor.id) {
+           return; // Skip if not GM's designated character
+       }
+   }
+   ```
+
+2. Permission Levels
+   - NONE (0): No access
+   - LIMITED (1): Limited viewing
+   - OBSERVER (2): Can view but not modify
+   - OWNER (3): Full control
+   - DEFAULT: System default permission level
+
+3. Implementation Considerations
+   - Always check explicit ownership
+   - Handle GM permissions separately
+   - Validate designated characters
+   - Log permission decisions
+   - Consider system-specific defaults
+   - Maintain proper scope isolation
 
 ## Maintenance
 1. Regular Updates

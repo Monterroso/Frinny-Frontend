@@ -202,17 +202,124 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
     }
 });
 
-// Handle combat turns
+// Handle combat start and turns
 Hooks.on('updateCombat', async (combat, changed, options, userId) => {
     console.log('Frinny | updateCombat hook triggered:', {
         round: combat.round,
         turn: combat.turn,
-        userId: userId
+        userId: userId,
+        changed: changed,
+        started: combat.started
     });
 
-    // Only proceed if it's our turn and we're in combat
+    // Check if this update is the combat starting
+    const isCombatStarting = changed.round === 1 && changed.turn === 0 && combat.started && !options.direction;
+    
+    if (isCombatStarting) {
+        console.log('Frinny | Combat is starting');
+        
+        // Check if the user has a valid character in combat
+        const userCharacter = game.user.character;
+        const userCombatant = combat.turns.find(t => 
+            t.actor?.id === userCharacter?.id && 
+            t.actor.type === 'character' && 
+            game.system.id === 'pf2e'
+        );
+
+        if (!userCombatant) {
+            console.log('Frinny | Combat start skipped: No valid user character in combat', {
+                userCharacterId: userCharacter?.id,
+                systemId: game.system.id
+            });
+            return;
+        }
+
+        // Verify character ownership
+        const userPermissionLevel = userCombatant.actor.getUserLevel(game.user);
+        const isGM = game.user.isGM;
+
+        // For non-GMs, require explicit OWNER permission
+        if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
+            console.log('Frinny | Combat start skipped: User lacks explicit ownership', {
+                actorId: userCombatant.actor.id,
+                userId: game.user.id,
+                permissionLevel: userPermissionLevel,
+                requiredLevel: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
+            });
+            return;
+        }
+
+        // For GMs, ensure this is their designated character
+        if (isGM && userCharacter?.id !== userCombatant.actor.id) {
+            console.log('Frinny | Combat start skipped: GM viewing non-designated character', {
+                actorId: userCombatant.actor.id,
+                designatedCharacterId: userCharacter?.id
+            });
+            return;
+        }
+
+        if (game.frinny) {
+            console.log('Frinny | Processing combat start for character:', {
+                name: userCombatant.actor.name,
+                round: combat.round,
+                turn: combat.turn
+            });
+
+            try {
+                // Gather combat state data
+                const combatData = {
+                    combatId: combat.id,
+                    userId: game.user.id,
+                    round: combat.round,
+                    turn: combat.turn,
+                    // Current character state
+                    character: {
+                        name: userCombatant.actor.name,
+                        hp: userCombatant.actor.system.attributes.hp,
+                        ac: userCombatant.actor.system.attributes.ac,
+                        abilities: userCombatant.actor.system.abilities,
+                        skills: userCombatant.actor.system.skills,
+                        items: userCombatant.actor.items.map(i => ({
+                            id: i.id,
+                            name: i.name,
+                            type: i.type
+                        }))
+                    },
+                    // Get all combatants with initiative
+                    combatants: combat.turns.map(t => ({
+                        id: t.id,
+                        name: t.name,
+                        initiative: t.initiative,
+                        isAlly: t.actor?.hasPlayerOwner,
+                        isEnemy: !t.actor?.hasPlayerOwner,
+                        hp: t.actor?.system.attributes.hp,
+                        ac: t.actor?.system.attributes.ac,
+                        // Add other relevant combatant data
+                    }))
+                };
+
+                // Notify backend about combat start
+                await game.frinny.agentManager.notifyCombatStart(combatData);
+                console.log('Frinny | Successfully notified backend about combat start');
+
+                // Show Frinny's window if it's not already visible
+                if (!game.frinny.rendered) {
+                    await game.frinny.render(true);
+                    console.log('Frinny | Rendered Frinny window');
+                }
+            } catch (error) {
+                console.error('Frinny | Error during combat start processing:', error);
+            }
+        } else {
+            console.warn('Frinny | game.frinny not initialized, skipping combat start processing');
+        }
+        return;
+    }
+
+    // Handle regular turn updates
+    // Only proceed if we're in combat
     if (!combat.started || !combat.current?.tokenId) {
-        console.log('Frinny | updateCombat hook skipped: Combat not started or no current token');
+        console.log('Frinny | Turn update skipped: Combat not started or no current token');
         return;
     }
     
@@ -223,16 +330,41 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
         return;
     }
 
-    // Check if it's the player's turn
-    const isPlayerTurn = currentCombatant.actor?.hasPlayerOwner;
-    const isOurToken = currentCombatant.actor?.id === game.user.character?.id;
-    
-    if (!isPlayerTurn || !isOurToken) {
-        console.log('Frinny | updateCombat hook skipped: Not player\'s turn or not our token', {
-            isPlayerTurn: isPlayerTurn,
-            isOurToken: isOurToken,
-            actorId: currentCombatant.actor?.id,
-            userCharacterId: game.user.character?.id
+    // Check if the user has a valid character that's currently up
+    const userCharacter = game.user.character;
+    const isCurrentCharacter = currentCombatant.actor?.id === userCharacter?.id && 
+                             currentCombatant.actor.type === 'character' && 
+                             game.system.id === 'pf2e';
+
+    if (!isCurrentCharacter) {
+        console.log('Frinny | updateCombat hook skipped: Not user\'s character turn', {
+            currentActorId: currentCombatant.actor?.id,
+            userCharacterId: userCharacter?.id,
+            systemId: game.system.id
+        });
+        return;
+    }
+
+    // Verify character ownership
+    const userPermissionLevel = currentCombatant.actor.getUserLevel(game.user);
+    const isGM = game.user.isGM;
+
+    // For non-GMs, require explicit OWNER permission
+    if (!isGM && userPermissionLevel !== CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
+        console.log('Frinny | updateCombat hook skipped: User lacks explicit ownership', {
+            actorId: currentCombatant.actor.id,
+            userId: game.user.id,
+            permissionLevel: userPermissionLevel,
+            requiredLevel: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
+        });
+        return;
+    }
+
+    // For GMs, ensure this is their designated character
+    if (isGM && userCharacter?.id !== currentCombatant.actor.id) {
+        console.log('Frinny | updateCombat hook skipped: GM viewing non-designated character', {
+            actorId: currentCombatant.actor.id,
+            designatedCharacterId: userCharacter?.id
         });
         return;
     }

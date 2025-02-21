@@ -232,6 +232,24 @@ export class AgentManager {
     }
 
     /**
+     * Notify backend about combat start
+     * @param {Object} combatData - Initial combat state data
+     */
+    async notifyCombatStart(combatData) {
+        try {
+            if (this.isConnected) {
+                return await this._emitAndWait('combat_start', combatData);
+            }
+            return await this._sendRequest('/api/combat/start', combatData);
+        } catch (error) {
+            if (error.message === 'Socket.IO not connected') {
+                return await this._sendRequest('/api/combat/start', combatData);
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Submit feedback for a message
      * @param {string} messageId - The message ID
      * @param {string} type - The feedback type ('positive' or 'negative')
