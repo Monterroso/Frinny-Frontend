@@ -21,6 +21,7 @@ export class FrinnyChat extends Application {
         this.isTyping = false;
         this.messages = [];
         this.agentManager = new AgentManager();
+        this.showScrollButton = false;
         
         // Initialize window state
         this.position = game.user.getFlag("frinny", "windowPosition") || {};
@@ -92,17 +93,47 @@ export class FrinnyChat extends Application {
             messages: this.messages,
             isTyping: this.isTyping,
             avatarUrl: "modules/frinny/assets/images/default.png",
-            isAvatarCollapsed: this.isAvatarCollapsed
+            isAvatarCollapsed: this.isAvatarCollapsed,
+            showScrollButton: this.showScrollButton
         };
     }
 
-    // Override render to handle visibility
+    /**
+     * Scrolls the message history to the bottom
+     * @private
+     */
+    _scrollToBottom() {
+        const messageHistory = this.element.find('.message-history');
+        if (messageHistory.length) {
+            messageHistory[0].scrollTop = messageHistory[0].scrollHeight;
+        }
+    }
+
+    /**
+     * Check if we should show the scroll button
+     * @private
+     */
+    _checkScrollPosition() {
+        const messageHistory = this.element.find('.message-history')[0];
+        if (messageHistory) {
+            // Show button if scrolled up more than 100px from bottom
+            const isScrolledUp = messageHistory.scrollHeight - messageHistory.scrollTop - messageHistory.clientHeight > 100;
+            if (isScrolledUp !== this.showScrollButton) {
+                this.showScrollButton = isScrolledUp;
+                this.element.find('.scroll-to-bottom').toggleClass('visible', isScrolledUp);
+            }
+        }
+    }
+
+    // Override render to handle visibility and scroll to bottom after rendering
     async render(force = false, options = {}) {
         if (force === true || force === false) {
             this.isVisible = force;
             await game.user.setFlag("frinny", "windowVisible", this.isVisible);
         }
-        return super.render(force, options);
+        const result = await super.render(force, options);
+        this._scrollToBottom();
+        return result;
     }
 
     // Override close to handle visibility
@@ -182,6 +213,13 @@ export class FrinnyChat extends Application {
             const messageId = event.currentTarget.closest('.message').dataset.messageId;
             this._handleFeedback(messageId, 'negative');
         });
+
+        // Add scroll event listener
+        const messageHistory = html.find('.message-history');
+        messageHistory.on('scroll', () => this._checkScrollPosition());
+
+        // Add click handler for scroll button
+        html.find('.scroll-to-bottom').on('click', () => this._scrollToBottom());
     }
 
     /**
