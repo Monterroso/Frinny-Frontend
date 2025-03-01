@@ -8,7 +8,7 @@ export class AgentManager {
     constructor() {
         this.isConnected = false;
         this.socket = null;
-        this.backendUrl = 'http://localhost:5001'; // TODO: Make this configurable
+        this.backendUrl = '54.173.68.13:5001'; // TODO: Make this configurable, please don't go here plz
         this.typingCallback = null; // Callback for typing status
         this.userId = game.user.id; // Store the user's ID
         this.reconnectAttempts = 0;
