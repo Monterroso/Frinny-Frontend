@@ -1,6 +1,9 @@
 <div class="frinny-chat-container">
     <div class="avatar-panel">
-        <img src="{{avatarUrl}}" alt="Frinny" class="frinny-avatar" />
+        <div class="avatar-container">
+            <img src="{{avatarUrl}}" alt="Frinny" class="frinny-avatar active" />
+            <img src="{{avatarUrl}}" alt="Frinny" class="frinny-avatar inactive" />
+        </div>
         <button class="avatar-toggle" title="{{localize 'frinny.ui.toggleAvatar'}}">
             <i class="fas fa-chevron-left"></i>
         </button>

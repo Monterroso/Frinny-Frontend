@@ -63,11 +63,37 @@
     transition: transform 0.3s ease;
 }
 
-.frinny-avatar {
+.avatar-container {
+    position: relative;
     width: 150px;
     height: 150px;
     border-radius: 50%;
+    overflow: hidden;
+}
+
+.frinny-avatar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
     object-fit: cover;
+    transition: opacity 0.3s ease;
+}
+
+.frinny-avatar.active {
+    opacity: 1;
+    z-index: 2;
+}
+
+.frinny-avatar.inactive {
+    opacity: 0;
+    z-index: 1;
+}
+
+.avatar-panel.collapsed .avatar-container {
+    display: none;
 }
 
 .chat-panel {

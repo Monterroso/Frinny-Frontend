@@ -28,6 +28,10 @@ export class FrinnyChat extends Application {
         this.isVisible = game.user.getFlag("frinny", "windowVisible") ?? false;
         this.isAvatarCollapsed = game.user.getFlag("frinny", "avatarCollapsed") ?? false;
         
+        // Initialize avatar state management
+        this.avatarState = 'default'; // Possible states: default, thinking, happy, confused
+        this.avatarStateTimer = null;
+        
         // Load saved messages
         this._loadMessages();
 
@@ -39,8 +43,22 @@ export class FrinnyChat extends Application {
         // Set up typing status callback
         this.agentManager.onTypingStatus((isTyping) => {
             this.isTyping = isTyping;
+            if (isTyping) {
+                this._setAvatarState('thinking');
+            } else {
+                // When typing stops, we'll use the response handler to set the appropriate state
+                // Default back to default state after a delay only if no other state takes over
+                setTimeout(() => {
+                    if (this.avatarState === 'thinking') {
+                        this._setAvatarState('default');
+                    }
+                }, 1000);
+            }
             this.render(false);
         });
+        
+        // Monitor pending requests to update avatar state
+        this._startAvatarStateMonitoring();
     }
 
     /**
@@ -97,10 +115,26 @@ export class FrinnyChat extends Application {
     }
 
     getData() {
+        // Get the appropriate avatar URL based on the current state
+        let avatarUrl;
+        switch (this.avatarState) {
+            case 'thinking':
+                avatarUrl = "modules/frinny/assets/images/thinking.webp";
+                break;
+            case 'happy':
+                avatarUrl = "modules/frinny/assets/images/happy.webp";
+                break;
+            case 'confused':
+                avatarUrl = "modules/frinny/assets/images/confused.webp";
+                break;
+            default:
+                avatarUrl = "modules/frinny/assets/images/default.webp";
+        }
+        
         return {
             messages: this.messages,
             isTyping: this.isTyping,
-            avatarUrl: "modules/frinny/assets/images/default.png",
+            avatarUrl: avatarUrl,
             isAvatarCollapsed: this.isAvatarCollapsed,
             showScrollButton: this.showScrollButton
         };
@@ -298,6 +332,32 @@ export class FrinnyChat extends Application {
             }
         }
 
+        // Initialize avatar images if this is the first render
+        const avatarContainer = html.find('.avatar-container');
+        if (avatarContainer.length) {
+            const activeImg = avatarContainer.find('.frinny-avatar.active');
+            const inactiveImg = avatarContainer.find('.frinny-avatar.inactive');
+            
+            // Ensure both images have the correct initial source
+            let avatarUrl;
+            switch (this.avatarState) {
+                case 'thinking':
+                    avatarUrl = "modules/frinny/assets/images/thinking.webp";
+                    break;
+                case 'happy':
+                    avatarUrl = "modules/frinny/assets/images/happy.webp";
+                    break;
+                case 'confused':
+                    avatarUrl = "modules/frinny/assets/images/confused.webp";
+                    break;
+                default:
+                    avatarUrl = "modules/frinny/assets/images/default.webp";
+            }
+            
+            activeImg.attr('src', avatarUrl);
+            inactiveImg.attr('src', avatarUrl);
+        }
+
         // Input handling
         const input = html.find('.chat-input');
         const sendButton = html.find('.send-button');
@@ -371,10 +431,17 @@ export class FrinnyChat extends Application {
             const response = await this.agentManager.handlePrivateQuery(game.user.id, content);
             console.log('Got response from handlePrivateQuery', response);
             
+            // Set avatar to happy state briefly to acknowledge successful response
+            this._setAvatarState('happy', 2000); // Show happy for 2 seconds
+            
             // Add response to private chat
             await this._addMessage(response);
         } catch (error) {
             logError('getting AI response', error);
+            
+            // Set avatar to confused state to indicate an error
+            this._setAvatarState('confused', 2000); // Show confused for 2 seconds
+            
             const errorMsg = {
                 type: 'assistant',
                 content: game.i18n.localize('frinny.error.failedResponse'),
@@ -397,19 +464,32 @@ export class FrinnyChat extends Application {
             // Get response from agent
             const response = await this.agentManager.handlePublicQuery(game.user.id, content);
             
+            // Set avatar to happy state briefly to acknowledge successful response
+            this._setAvatarState('happy', 2000); // Show happy for 2 seconds
+            
             // Create Foundry chat message for Frinny's response
             await ChatMessage.create({
                 content: response.content,
-                speaker: { alias: 'Frinny', img: 'modules/frinny/assets/images/default.png' },
+                speaker: { 
+                    alias: 'Frinny', 
+                    img: `modules/frinny/assets/images/happy.webp` 
+                },
                 type: CONST.CHAT_MESSAGE_TYPES.OTHER,
                 flavor: game.i18n.localize('frinny.chat.responsePrefix')
             });
         } catch (error) {
             logError('getting AI response', error);
+            
+            // Set avatar to confused state to indicate an error
+            this._setAvatarState('confused', 2000); // Show confused for 2 seconds
+            
             // Show error in public chat
             await ChatMessage.create({
                 content: game.i18n.localize('frinny.error.failedResponse'),
-                speaker: { alias: 'Frinny', img: 'modules/frinny/assets/images/default.png' },
+                speaker: { 
+                    alias: 'Frinny', 
+                    img: `modules/frinny/assets/images/confused.webp` 
+                },
                 type: CONST.CHAT_MESSAGE_TYPES.OTHER,
                 flavor: game.i18n.localize('frinny.chat.errorPrefix')
             });
@@ -448,5 +528,107 @@ export class FrinnyChat extends Application {
                 feedbackError: true
             });
         }
+    }
+
+    /**
+     * Sets the avatar state and handles temporary states
+     * @param {string} state - The state to set ('default', 'thinking', 'happy', 'confused')
+     * @param {number} duration - Duration in ms for temporary states (happy, confused)
+     * @private
+     */
+    _setAvatarState(state, duration = 0) {
+        // Clear any existing timer
+        if (this.avatarStateTimer) {
+            clearTimeout(this.avatarStateTimer);
+            this.avatarStateTimer = null;
+        }
+        
+        // Set the new state
+        const previousState = this.avatarState;
+        this.avatarState = state;
+        logStateChange('Avatar state', { from: previousState, to: state });
+        
+        // Update the avatar with cross-fade if the element exists
+        if (this.element.length) {
+            this._updateAvatarWithCrossFade(state);
+        } else {
+            // If element doesn't exist yet, just render
+            this.render(false);
+        }
+        
+        // If duration is provided, schedule reverting to default
+        if (duration > 0) {
+            this.avatarStateTimer = setTimeout(() => {
+                this.avatarState = 'default';
+                if (this.element.length) {
+                    this._updateAvatarWithCrossFade('default');
+                } else {
+                    this.render(false);
+                }
+                this.avatarStateTimer = null;
+            }, duration);
+        }
+    }
+    
+    /**
+     * Updates the avatar with a cross-fade effect
+     * @param {string} state - The new avatar state
+     * @private
+     */
+    _updateAvatarWithCrossFade(state) {
+        // Get the avatar container
+        const avatarContainer = this.element.find('.avatar-container');
+        if (!avatarContainer.length) return;
+        
+        // Get the active and inactive images
+        const activeImg = avatarContainer.find('.frinny-avatar.active');
+        const inactiveImg = avatarContainer.find('.frinny-avatar.inactive');
+        
+        if (!activeImg.length || !inactiveImg.length) return;
+        
+        // Get the URL for the new state
+        let newAvatarUrl;
+        switch (state) {
+            case 'thinking':
+                newAvatarUrl = "modules/frinny/assets/images/thinking.webp";
+                break;
+            case 'happy':
+                newAvatarUrl = "modules/frinny/assets/images/happy.webp";
+                break;
+            case 'confused':
+                newAvatarUrl = "modules/frinny/assets/images/confused.webp";
+                break;
+            default:
+                newAvatarUrl = "modules/frinny/assets/images/default.webp";
+        }
+        
+        // Set the new image source on the inactive image
+        inactiveImg.attr('src', newAvatarUrl);
+        
+        // After a brief delay to ensure the image is loaded, swap the classes
+        setTimeout(() => {
+            activeImg.removeClass('active').addClass('inactive');
+            inactiveImg.removeClass('inactive').addClass('active');
+        }, 50);
+    }
+    
+    /**
+     * Start monitoring agent manager's pending requests to update avatar state
+     * @private
+     */
+    _startAvatarStateMonitoring() {
+        // Check every second for pending requests
+        setInterval(() => {
+            const hasPendingRequests = this.agentManager.pendingRequests.size > 0;
+            
+            // If there are pending requests and we're not already in thinking state, set to thinking
+            if (hasPendingRequests && this.avatarState !== 'thinking') {
+                this._setAvatarState('thinking');
+            } 
+            // If no pending requests and still in thinking state, return to default
+            else if (!hasPendingRequests && this.avatarState === 'thinking' && !this.isTyping) {
+                this._setAvatarState('default');
+            }
+        }, 1000);
     }
 } 
