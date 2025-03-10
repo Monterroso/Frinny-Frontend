@@ -4,39 +4,45 @@ An AI assistant for Pathfinder 2E that helps with character creation, leveling, 
 
 ## Development
 
-### Local Build
+### Local Development Workflow
 
-To build the module locally for testing:
+To update the module version and prepare for a release:
 
-1. Run the build script with the desired version number:
+1. Use the version bump script to update the version number:
 
 ```bash
-./scripts/build.sh 1.1.2
+./scripts/bump-version.sh patch  # Options: major, minor, patch
 ```
 
 This will:
+- Calculate the next version number based on semantic versioning
 - Update the version in `frinny/module.json`
-- Create a `module.zip` file in the root directory
+- Update the download URL in `module.json`
+- Optionally create a local `module.zip` file for testing
 
-### Automated Deployment
+2. Commit and push your changes to the main branch:
 
-This project uses GitHub Actions for automated deployment. To release a new version:
+```bash
+git add frinny/module.json
+git commit -m "Bump version to X.Y.Z"
+git push origin main
+```
 
-1. Go to the GitHub repository
-2. Navigate to the "Actions" tab
-3. Select the "Release Module" workflow
-4. Click "Run workflow"
-5. Enter the new version number (e.g., 1.1.2)
-6. Choose whether this is a pre-release
-7. Click "Run workflow"
+3. The GitHub Actions workflow will automatically:
+   - Detect the version change
+   - Create a module.zip package
+   - Create a GitHub release with the new version
+   - Upload the module.zip to the release
 
-The GitHub Action will:
-- Update the version in module.json
-- Update the download URL in module.json
-- Create a module.zip file
-- Commit the changes to the repository
-- Create a GitHub release with the specified version
-- Upload the module.zip file to the release
+### Manual Local Build
+
+If you need to manually set a specific version:
+
+```bash
+./scripts/build.sh 1.2.3 [--create-zip]
+```
+
+The `--create-zip` flag is optional and will create a local zip file for testing.
 
 ## Installation
 

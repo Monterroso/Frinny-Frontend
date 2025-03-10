@@ -1,59 +1,71 @@
 name: Release Module
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g., 1.1.2)'
-        required: true
-      is_prerelease:
-        description: 'Is this a pre-release?'
-        type: boolean
-        default: false
+  push:
+    branches:
+      - main
+    paths:
+      - 'frinny/module.json'
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should_release: ${{ steps.check-release.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # We need at least the current and previous commit
+
+      - name: Get current version
+        id: get-version
+        run: |
+          VERSION=$(jq -r '.version' frinny/module.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Check if version was updated
+        id: check-release
+        run: |
+          # Get the previous version from the previous commit
+          git checkout HEAD~1
+          PREV_VERSION=$(jq -r '.version' frinny/module.json)
+          git checkout -
+          
+          echo "Previous version: $PREV_VERSION"
+          echo "Current version: ${{ steps.get-version.outputs.version }}"
+          
+          if [ "$PREV_VERSION" != "${{ steps.get-version.outputs.version }}" ]; then
+            echo "Version changed from $PREV_VERSION to ${{ steps.get-version.outputs.version }}"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Update module.json version
-        id: update-version
-        run: |
-          # Get the new version from input
-          NEW_VERSION="${{ github.event.inputs.version }}"
-          
-          # Update version in module.json
-          jq '.version = "'$NEW_VERSION'"' frinny/module.json > temp.json && mv temp.json frinny/module.json
-          
-          # Update download URL in module.json
-          jq '.download = "https://github.com/${{ github.repository }}/releases/download/v'$NEW_VERSION'/module.zip"' frinny/module.json > temp.json && mv temp.json frinny/module.json
-          
-          echo "::set-output name=version::$NEW_VERSION"
-          cat frinny/module.json
 
       - name: Create module zip
         run: |
           cd frinny
           zip -r ../module.zip *
 
-      - name: Commit changes
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add frinny/module.json
-          git commit -m "Update version to ${{ steps.update-version.outputs.version }}"
-          git push
-
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.update-version.outputs.version }}
-          name: Release v${{ steps.update-version.outputs.version }}
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: Release v${{ needs.check-version.outputs.version }}
           draft: false
-          prerelease: ${{ github.event.inputs.is_prerelease }}
+          prerelease: false
           files: module.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
