@@ -40,6 +40,41 @@ Hooks.once('ready', () => {
             }
         });
 
+        game.settings.register('frinny', 'wsUrl', {
+            name: 'WebSocket URL',
+            hint: 'URL for the WebSocket connection (e.g., wss://xxxxx.execute-api.region.amazonaws.com/stage)',
+            scope: 'world',
+            config: true,
+            type: String,
+            default: 'wss://frinny.net/ws',
+            onChange: value => {
+                logStateChange('WebSocket URL', 'changed', { value });
+                // Reconnect if Frinny is already initialized
+                if (game.frinny && game.frinny.agentManager) {
+                    game.frinny.agentManager.wsUrl = value;
+                    game.frinny.agentManager.connect().catch(error => {
+                        logError('WebSocket reconnection', error);
+                    });
+                }
+            }
+        });
+
+        game.settings.register('frinny', 'backendUrl', {
+            name: 'HTTP API URL',
+            hint: 'URL for the HTTP API (e.g., https://xxxxx.execute-api.region.amazonaws.com/stage)',
+            scope: 'world',
+            config: true,
+            type: String,
+            default: 'https://frinny.net',
+            onChange: value => {
+                logStateChange('HTTP API URL', 'changed', { value });
+                // Update backendUrl if Frinny is already initialized
+                if (game.frinny && game.frinny.agentManager) {
+                    game.frinny.agentManager.backendUrl = value;
+                }
+            }
+        });
+
         game.settings.register('frinny', 'maxMessages', {
             name: game.i18n.localize('frinny.settings.maxMessages.name'),
             hint: game.i18n.localize('frinny.settings.maxMessages.hint'),

@@ -13,6 +13,9 @@
             "url": "https://github.com/monterroso"
         }
     ],
+    "scripts": [
+        "scripts/lib/robust-websocket.js"
+    ],
     "esmodules": [
         "scripts/main.js"
     ],

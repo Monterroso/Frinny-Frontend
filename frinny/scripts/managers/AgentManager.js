@@ -8,15 +8,75 @@ export class AgentManager {
     constructor() {
         this.isConnected = false;
         this.socket = null;
-        this.backendUrl = 'https://frinny.net'; // TODO: Make this configurable, please don't go here plz
+        
+        // HTTP API endpoint - can be configured for AWS API Gateway
+        // AWS API Gateway HTTP URLs typically look like:
+        // https://xxxxx.execute-api.region.amazonaws.com/stage
+        this.backendUrl = game.settings.get('frinny', 'backendUrl') || 'https://frinny.net';
+        
+        // WebSocket endpoint - can be configured for AWS API Gateway
+        // AWS API Gateway WebSocket URLs typically look like:
+        // wss://xxxxx.execute-api.region.amazonaws.com/stage
+        this.wsUrl = game.settings.get('frinny', 'wsUrl') || 'wss://frinny.net/ws';
+        
         this.typingCallback = null; // Callback for typing status
         this.userId = game.user.id; // Store the user's ID
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.pendingRequests = new Map(); // Store both resolve and reject callbacks
+        this.messageHandlers = new Map(); // Store message handlers by type
         
         // Start monitoring pending requests
         this._startRequestMonitoring();
+        
+        // Set up message handlers
+        this._setupMessageHandlers();
+    }
+
+    /**
+     * Set up message handlers for different message types
+     * @private
+     */
+    _setupMessageHandlers() {
+        this.messageHandlers.set('typing_status', (data) => {
+            if (this.typingCallback) {
+                this.typingCallback(data.isTyping);
+            }
+        });
+        
+        this.messageHandlers.set('query_response', (data) => {
+            this._handleSocketResponse(data.request_id, data);
+        });
+        
+        this.messageHandlers.set('character_creation_response', (data) => {
+            this._handleSocketResponse(data.request_id, data);
+        });
+        
+        this.messageHandlers.set('combat_suggestion', (data) => {
+            this._handleSocketResponse(data.request_id, data);
+        });
+        
+        this.messageHandlers.set('level_up_response', (data) => {
+            this._handleSocketResponse(data.request_id, data);
+        });
+        
+        this.messageHandlers.set('error', (error) => {
+            logError('WebSocket server', error, {
+                userId: this.userId,
+                requestId: error.request_id
+            });
+
+            if (error.request_id) {
+                // Handle error for specific request
+                this._handleSocketError(error.request_id, new Error(error.message));
+            } else {
+                // Handle global error - reject all pending requests
+                for (const [requestId, { reject }] of this.pendingRequests) {
+                    reject(new Error(`WebSocket server error: ${error.message}`));
+                }
+                this.pendingRequests.clear();
+            }
+        });
     }
 
     /**
@@ -63,125 +123,120 @@ export class AgentManager {
     }
 
     /**
-     * Initialize the Socket.IO connection
+     * Initialize the WebSocket connection
      * @returns {Promise<void>}
      */
     async connect() {
         try {
-            // Load Socket.IO client from CDN if not available
-            if (!window.io) {
+            // Load robust-websocket from local lib directory if not available
+            if (!window.RobustWebSocket) {
+                // Use Foundry's built-in path resolution
+                const scriptPath = 'modules/frinny/scripts/lib/robust-websocket.js';
+                
+                // Create script element to load the library
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
-                    script.src = 'https://cdn.socket.io/4.7.4/socket.io.min.js';
+                    script.src = scriptPath;
                     script.onload = resolve;
-                    script.onerror = reject;
+                    script.onerror = (error) => {
+                        console.error('Failed to load robust-websocket from module path:', error);
+                        reject(new Error(`Failed to load robust-websocket from ${scriptPath}. Make sure the file exists in your module directory.`));
+                    };
                     document.head.appendChild(script);
                 });
+                
+                // Verify that RobustWebSocket is now available
+                if (!window.RobustWebSocket) {
+                    throw new Error('RobustWebSocket was not properly loaded. Check the module structure.');
+                }
             }
 
-            // Initialize Socket.IO with authentication
-            this.socket = io(this.backendUrl, {
-                query: { userId: this.userId },
-                reconnection: true,
-                reconnectionAttempts: this.maxReconnectAttempts,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                timeout: 20000,
+            // Create WebSocket URL with user ID as query parameter
+            const wsUrlWithParams = `${this.wsUrl}?userId=${this.userId}`;
+            
+            // Initialize robust-websocket
+            this.socket = new RobustWebSocket(wsUrlWithParams, null, {
+                // Configuration options
+                timeout: 30000, // 30 seconds
+                shouldReconnect: (event, ws) => {
+                    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                        return false; // Stop reconnecting after max attempts
+                    }
+                    
+                    this.reconnectAttempts++;
+                    
+                    // Return delay in ms
+                    return Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
+                }
             });
 
             // Connection event handlers
-            this.socket.on('connect', () => {
-                logBackendCommunication('Socket.IO connection', true, {
+            this.socket.addEventListener('open', () => {
+                logBackendCommunication('WebSocket connection', true, {
                     userId: this.userId
                 });
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
             });
 
-            this.socket.on('disconnect', () => {
-                logBackendCommunication('Socket.IO connection', false, {
-                    reason: 'disconnected',
+            this.socket.addEventListener('close', (event) => {
+                logBackendCommunication('WebSocket connection', false, {
+                    reason: event.reason || 'disconnected',
+                    code: event.code,
                     userId: this.userId
                 });
                 this.isConnected = false;
 
                 // Reject all pending requests on disconnect
                 for (const [requestId, { reject }] of this.pendingRequests) {
-                    reject(new Error('Socket.IO disconnected'));
+                    reject(new Error('WebSocket disconnected'));
                 }
                 this.pendingRequests.clear();
             });
 
-            this.socket.on('connect_error', (error) => {
-                logError('Socket.IO connection', error, {
+            this.socket.addEventListener('error', (error) => {
+                logError('WebSocket connection', error, {
                     userId: this.userId,
                     attempt: this.reconnectAttempts + 1,
                     maxAttempts: this.maxReconnectAttempts
                 });
-                this.reconnectAttempts++;
 
                 // Reject all pending requests on connection error
                 for (const [requestId, { reject }] of this.pendingRequests) {
-                    reject(new Error('Socket.IO connection error'));
+                    reject(new Error('WebSocket connection error'));
                 }
                 this.pendingRequests.clear();
-
-                if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                    logError('Socket.IO connection', new Error('Max reconnection attempts reached'), {
-                        userId: this.userId,
-                        attempts: this.reconnectAttempts
-                    });
-                    this.socket.disconnect();
-                }
             });
 
-            // Message handlers
-            this.socket.on('typing_status', (data) => {
-                if (this.typingCallback) {
-                    this.typingCallback(data.isTyping);
-                }
-            });
-
-            // Response handlers for different message types
-            this.socket.on('query_response', (data) => {
-                this._handleSocketResponse(data.request_id, data);
-            });
-
-            this.socket.on('character_creation_response', (data) => {
-                this._handleSocketResponse(data.request_id, data);
-            });
-
-            this.socket.on('combat_suggestion', (data) => {
-                this._handleSocketResponse(data.request_id, data);
-            });
-
-            this.socket.on('level_up_response', (data) => {
-                this._handleSocketResponse(data.request_id, data);
-            });
-
-            // Error handler
-            this.socket.on('error', (error) => {
-                logError('Socket.IO server', error, {
-                    userId: this.userId,
-                    requestId: error.request_id
-                });
-
-                if (error.request_id) {
-                    // Handle error for specific request
-                    this._handleSocketError(error.request_id, new Error(error.message));
-                } else {
-                    // Handle global error - reject all pending requests
-                    for (const [requestId, { reject }] of this.pendingRequests) {
-                        reject(new Error(`Socket.IO server error: ${error.message}`));
+            // Message handler
+            this.socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Route message to appropriate handler based on type or action
+                    // API Gateway typically uses 'action' field
+                    const messageType = data.action;
+                    
+                    if (messageType && this.messageHandlers.has(messageType)) {
+                        this.messageHandlers.get(messageType)(data);
+                    } else {
+                        logError('WebSocket message', new Error('Unknown message type'), {
+                            type: messageType,
+                            data: data,
+                            event: event
+                        });
                     }
-                    this.pendingRequests.clear();
+                } catch (error) {
+                    logError('WebSocket message parsing', error, {
+                        data: event.data
+                    });
                 }
             });
 
         } catch (error) {
-            logError('Socket.IO initialization', error, {
+            logError('WebSocket initialization', error, {
                 userId: this.userId,
-                backendUrl: this.backendUrl
+                wsUrl: this.wsUrl
             });
             this.isConnected = false;
             throw error;
@@ -190,21 +245,23 @@ export class AgentManager {
 
     /**
      * Send a message and wait for response with proper error handling and cleanup
-     * @param {string} eventName - The Socket.IO event name to emit
+     * @param {string} type - The message type
      * @param {Object} data - The data to send
      * @returns {Promise<Object>} The server's response
      * @private
      */
-    async _emitAndWait(eventName, data) {
+    async _emitAndWait(type, data) {
         // Validate connection state
         if (!this.isConnected || !this.socket) {
-            throw new Error('Socket.IO not connected');
+            throw new Error('WebSocket not connected');
         }
-        console.log('emitting and waiting', eventName, data);
+        console.log('sending message', type, data);
         
         // Create request ID and payload
         const requestId = Date.now().toString();
         const payload = {
+            action: type, // API Gateway uses 'action' for routing
+            type,         // Keep type for backward compatibility
             request_id: requestId,
             ...data
         };
@@ -237,12 +294,12 @@ export class AgentManager {
             timeoutId = setTimeout(() => {
                 if (this.pendingRequests.has(requestId)) {
                     const { reject, cleanup } = this.pendingRequests.get(requestId);
-                    const error = new Error('Socket.IO response timeout');
+                    const error = new Error('WebSocket response timeout');
                     
                     // Log before cleanup to ensure we have the request data
-                    logError('Socket.IO timeout', error, {
+                    logError('WebSocket timeout', error, {
                         requestId,
-                        eventName,
+                        type,
                         elapsed: '30s',
                         pendingRequestCount: this.pendingRequests.size,
                         isConnected: this.isConnected
@@ -255,9 +312,9 @@ export class AgentManager {
                     reject(error);
                 } else {
                     // Log if somehow the request was already removed
-                    logError('Socket.IO timeout for missing request', new Error('Request not found'), {
+                    logError('WebSocket timeout for missing request', new Error('Request not found'), {
                         requestId,
-                        eventName,
+                        type,
                         elapsed: '30s',
                         pendingRequestCount: this.pendingRequests.size,
                         isConnected: this.isConnected
@@ -266,36 +323,22 @@ export class AgentManager {
             }, 30000);
 
             try {
-                // Emit with acknowledgment callback
-                this.socket.emit(eventName, payload, (error) => {
-                    if (error) {
-                        const wrappedError = new Error(`Socket.IO emit error: ${error}`);
-                        logError('Socket.IO emit', wrappedError, {
-                            requestId,
-                            eventName,
-                            originalError: error
-                        });
+                // Send the message
+                this.socket.send(JSON.stringify(payload));
 
-                        if (this.pendingRequests.has(requestId)) {
-                            const { reject } = this.pendingRequests.get(requestId);
-                            reject(wrappedError);
-                        }
-                    }
-                });
-
-                // Log successful emit
-                logBackendCommunication('Socket.IO emit', true, {
+                // Log successful send
+                logBackendCommunication('WebSocket send', true, {
                     requestId,
-                    eventName,
+                    type,
                     userId: this.userId
                 });
 
             } catch (error) {
-                // Handle any synchronous errors during emit
-                const wrappedError = new Error(`Socket.IO emit failed: ${error.message}`);
-                logError('Socket.IO emit', wrappedError, {
+                // Handle any synchronous errors during send
+                const wrappedError = new Error(`WebSocket send failed: ${error.message}`);
+                logError('WebSocket send', wrappedError, {
                     requestId,
-                    eventName,
+                    type,
                     originalError: error
                 });
 
@@ -308,7 +351,7 @@ export class AgentManager {
     }
 
     /**
-     * Handle Socket.IO response
+     * Handle WebSocket response
      * @param {string} requestId - The ID of the request
      * @param {Object} data - The response data
      * @private
@@ -321,7 +364,7 @@ export class AgentManager {
     }
 
     /**
-     * Handle Socket.IO error
+     * Handle WebSocket error
      * @param {string} requestId - The ID of the request
      * @param {Error} error - The error object
      * @private
@@ -426,12 +469,12 @@ export class AgentManager {
      * @private
      */
     async _sendQuery(payload) {
-        // Prefer Socket.IO if connected
+        // Prefer WebSocket if connected
         if (this.isConnected) {
             return await this._emitAndWait('query', payload);
         }
         // Fallback to HTTP
-        return await this._sendRequest('/api/query', payload);
+        return await this._sendRequest('query', payload);
     }
 
     /**
@@ -443,10 +486,10 @@ export class AgentManager {
             if (this.isConnected) {
                 return await this._emitAndWait('character_creation_start', context);
             }
-            return await this._sendRequest('/api/character/create', context);
+            return await this._sendRequest('character/create', context);
         } catch (error) {
-            if (error.message === 'Socket.IO not connected') {
-                return await this._sendRequest('/api/character/create', context);
+            if (error.message === 'WebSocket not connected') {
+                return await this._sendRequest('character/create', context);
             }
             throw error;
         }
@@ -461,10 +504,10 @@ export class AgentManager {
             if (this.isConnected) {
                 return await this._emitAndWait('combat_turn', combatState);
             }
-            return await this._sendRequest('/api/combat/suggest', combatState);
+            return await this._sendRequest('combat/suggest', combatState);
         } catch (error) {
-            if (error.message === 'Socket.IO not connected') {
-                return await this._sendRequest('/api/combat/suggest', combatState);
+            if (error.message === 'WebSocket not connected') {
+                return await this._sendRequest('combat/suggest', combatState);
             }
             throw error;
         }
@@ -479,10 +522,10 @@ export class AgentManager {
             if (this.isConnected) {
                 return await this._emitAndWait('level_up', levelUpData);
             }
-            return await this._sendRequest('/api/character/level-up', levelUpData);
+            return await this._sendRequest('character/level-up', levelUpData);
         } catch (error) {
-            if (error.message === 'Socket.IO not connected') {
-                return await this._sendRequest('/api/character/level-up', levelUpData);
+            if (error.message === 'WebSocket not connected') {
+                return await this._sendRequest('character/level-up', levelUpData);
             }
             throw error;
         }
@@ -497,10 +540,10 @@ export class AgentManager {
             if (this.isConnected) {
                 return await this._emitAndWait('combat_start', combatData);
             }
-            return await this._sendRequest('/api/combat/start', combatData);
+            return await this._sendRequest('combat/start', combatData);
         } catch (error) {
-            if (error.message === 'Socket.IO not connected') {
-                return await this._sendRequest('/api/combat/start', combatData);
+            if (error.message === 'WebSocket not connected') {
+                return await this._sendRequest('combat/start', combatData);
             }
             throw error;
         }
@@ -513,7 +556,7 @@ export class AgentManager {
      */
     async submitFeedback(messageId, type) {
         // Use HTTP for feedback as it's not time-critical
-        return this._sendRequest('/api/feedback', { messageId, type });
+        return this._sendRequest('feedback', { messageId, type });
     }
 
     /**
@@ -522,7 +565,16 @@ export class AgentManager {
      */
     async _sendRequest(endpoint, data) {
         try {
-            const response = await fetch(`${this.backendUrl}${endpoint}`, {
+            // Ensure endpoint starts with a slash if not already
+            const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+            
+            // For API Gateway, we might need to use the full URL without additional path
+            // If backendUrl already includes the endpoint (like API Gateway stage paths)
+            const url = this.backendUrl.includes('/api') ? 
+                this.backendUrl : 
+                `${this.backendUrl}${formattedEndpoint}`;
+                
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
