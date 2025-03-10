@@ -2,7 +2,7 @@
     "id": "frinny",
     "title": "Frinny - AI Assistant",
     "description": "An AI assistant for Pathfinder 2E that helps with character creation, leveling, and combat.",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "compatibility": {
         "minimum": "12",
         "verified": "12"

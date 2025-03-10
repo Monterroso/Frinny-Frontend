@@ -9,16 +9,16 @@
         </button>
     </div>
     <div class="chat-panel">
-        <div class="message-history">
+        <div class="frinny_message-history">
             {{#each messages}}
-                <div class="message {{type}}" data-message-id="{{messageId}}">
+                <div class="frinny_message {{type}}" data-message-id="{{messageId}}">
                     <div class="content">{{content}}</div>
                     {{#if showFeedback}}
-                        <div class="feedback {{#if feedbackSubmitted}}submitted{{/if}} {{#if feedbackError}}error{{/if}}">
+                        <div class="frinny_feedback {{#if feedbackSubmitted}}submitted{{/if}} {{#if feedbackError}}error{{/if}}">
                             {{#if feedbackSubmitted}}
-                                <div class="feedback-confirmation">{{localize 'frinny.ui.feedback.submitted'}}</div>
+                                <div class="frinny_feedback-confirmation">{{localize 'frinny.ui.feedback.submitted'}}</div>
                             {{else if feedbackError}}
-                                <div class="feedback-error">{{localize 'frinny.ui.feedback.error'}}</div>
+                                <div class="frinny_feedback-error">{{localize 'frinny.ui.feedback.error'}}</div>
                             {{else}}
                                 <button class="thumbs-up" title="{{localize 'frinny.ui.feedback.helpful'}}"><i class="fas fa-thumbs-up"></i></button>
                                 <button class="thumbs-down" title="{{localize 'frinny.ui.feedback.notHelpful'}}"><i class="fas fa-thumbs-down"></i></button>
@@ -28,7 +28,7 @@
                 </div>
             {{/each}}
             {{#if isTyping}}
-                <div class="typing-indicator">
+                <div class="frinny_typing-indicator">
                     <span>{{localize 'frinny.ui.typing'}}</span>
                     <span class="dots">
                         <span>.</span><span>.</span><span>.</span>
