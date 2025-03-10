@@ -1,0 +1,59 @@
+name: Release Module
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.1.2)'
+        required: true
+      is_prerelease:
+        description: 'Is this a pre-release?'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Update module.json version
+        id: update-version
+        run: |
+          # Get the new version from input
+          NEW_VERSION="${{ github.event.inputs.version }}"
+          
+          # Update version in module.json
+          jq '.version = "'$NEW_VERSION'"' frinny/module.json > temp.json && mv temp.json frinny/module.json
+          
+          # Update download URL in module.json
+          jq '.download = "https://github.com/${{ github.repository }}/releases/download/v'$NEW_VERSION'/module.zip"' frinny/module.json > temp.json && mv temp.json frinny/module.json
+          
+          echo "::set-output name=version::$NEW_VERSION"
+          cat frinny/module.json
+
+      - name: Create module zip
+        run: |
+          cd frinny
+          zip -r ../module.zip *
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add frinny/module.json
+          git commit -m "Update version to ${{ steps.update-version.outputs.version }}"
+          git push
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.update-version.outputs.version }}
+          name: Release v${{ steps.update-version.outputs.version }}
+          draft: false
+          prerelease: ${{ github.event.inputs.is_prerelease }}
+          files: module.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

@@ -1,0 +1,18 @@
+# Build artifacts
+module.zip
+temp.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if you add them in the future)
+node_modules/
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-*
+
+# Logs
+*.log 
