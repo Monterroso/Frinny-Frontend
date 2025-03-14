@@ -145,7 +145,7 @@ export class FrinnyChat extends Application {
      * @private
      */
     _scrollToBottom() {
-        const messageHistory = this.element.find('.message-history');
+        const messageHistory = this.element.find('.frinny_message-history');
         if (messageHistory.length) {
             const element = messageHistory[0];
             const previousScroll = element.scrollTop;
@@ -167,7 +167,7 @@ export class FrinnyChat extends Application {
      * @private
      */
     _checkScrollPosition() {
-        const messageHistory = this.element.find('.message-history')[0];
+        const messageHistory = this.element.find('.frinny_message-history')[0];
         if (messageHistory) {
             // Show button if not at the bottom
             const isScrolledUp = !this._isAtBottom();
@@ -192,7 +192,7 @@ export class FrinnyChat extends Application {
      * @returns {boolean} True if the window is at the bottom
      */
     _isAtBottom() {
-        const messageHistory = this.element.find('.message-history')[0];
+        const messageHistory = this.element.find('.frinny_message-history')[0];
         if (!messageHistory) return true;
         
         // Consider "at bottom" if within 20px of the bottom
@@ -213,7 +213,7 @@ export class FrinnyChat extends Application {
         
         // If window is open, save current scroll position before re-rendering
         if (this.element.length) {
-            const messageHistory = this.element.find('.message-history')[0];
+            const messageHistory = this.element.find('.frinny_message-history')[0];
             if (messageHistory) {
                 const currentScroll = messageHistory.scrollTop;
                 // Use setFlag without await to avoid delaying the render
@@ -255,7 +255,7 @@ export class FrinnyChat extends Application {
     async close(options = {}) {
         // Save current scroll position before closing
         if (this.element.length) {
-            const messageHistory = this.element.find('.message-history')[0];
+            const messageHistory = this.element.find('.frinny_message-history')[0];
             if (messageHistory) {
                 const currentScroll = messageHistory.scrollTop;
                 // Use setFlag without await to avoid delaying the close
@@ -305,7 +305,7 @@ export class FrinnyChat extends Application {
             const { isInitialOpen, shouldScrollToBottom } = this._pendingRender;
             this._pendingRender = null; // Clear it to avoid duplicate processing
             
-            const messageHistory = html.find('.message-history')[0];
+            const messageHistory = html.find('.frinny_message-history')[0];
             
             if (isInitialOpen) {
                 const savedPosition = game.user.getFlag("frinny", "lastScrollPosition");
@@ -392,17 +392,17 @@ export class FrinnyChat extends Application {
 
         // Feedback buttons
         html.find('.thumbs-up').on('click', (event) => {
-            const messageId = event.currentTarget.closest('.message').dataset.messageId;
+            const messageId = event.currentTarget.closest('.frinny_message').dataset.messageId;
             this._handleFeedback(messageId, 'positive');
         });
 
         html.find('.thumbs-down').on('click', (event) => {
-            const messageId = event.currentTarget.closest('.message').dataset.messageId;
+            const messageId = event.currentTarget.closest('.frinny_message').dataset.messageId;
             this._handleFeedback(messageId, 'negative');
         });
 
         // Add scroll event listener
-        const messageHistory = html.find('.message-history');
+        const messageHistory = html.find('.frinny_message-history');
         messageHistory.on('scroll', () => this._checkScrollPosition());
 
         // Add click handler for scroll button

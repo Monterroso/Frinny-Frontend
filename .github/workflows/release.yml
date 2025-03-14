@@ -1,0 +1,71 @@
+name: Release Module
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frinny/module.json'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should_release: ${{ steps.check-release.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # We need at least the current and previous commit
+
+      - name: Get current version
+        id: get-version
+        run: |
+          VERSION=$(jq -r '.version' frinny/module.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Check if version was updated
+        id: check-release
+        run: |
+          # Get the previous version from the previous commit
+          git checkout HEAD~1
+          PREV_VERSION=$(jq -r '.version' frinny/module.json)
+          git checkout -
+          
+          echo "Previous version: $PREV_VERSION"
+          echo "Current version: ${{ steps.get-version.outputs.version }}"
+          
+          if [ "$PREV_VERSION" != "${{ steps.get-version.outputs.version }}" ]; then
+            echo "Version changed from $PREV_VERSION to ${{ steps.get-version.outputs.version }}"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create module zip
+        run: |
+          cd frinny
+          zip -r ../module.zip *
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: Release v${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: module.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

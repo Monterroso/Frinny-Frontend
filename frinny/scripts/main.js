@@ -117,7 +117,7 @@ Hooks.on('getSceneControlButtons', (controls) => {
         name: 'frinny',
         title: 'Frinny Controls',
         layer: 'controls',
-        icon: 'fas fa-robot',
+        icon: 'fa-solid fa-guitar',
         tools: [{
             name: 'chat',
             title: 'Toggle Frinny Chat',

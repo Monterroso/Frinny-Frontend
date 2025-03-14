@@ -104,7 +104,7 @@
     position: relative;
 }
 
-.message-history {
+.frinny_message-history {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
@@ -114,26 +114,26 @@
     position: relative;
 }
 
-.message {
+.frinny_message {
     max-width: 80%;
     padding: 12px;
     border-radius: 12px;
     position: relative;
 }
 
-.message.user {
+.frinny_message.user {
     align-self: flex-end;
     background: #007bff;
     color: white;
 }
 
-.message.assistant {
+.frinny_message.assistant {
     align-self: flex-start;
     background: #f0f2f5;
     color: #1c1e21;
 }
 
-.feedback {
+.frinny_feedback {
     display: flex;
     gap: 8px;
     margin-top: 8px;
@@ -141,28 +141,28 @@
     transition: opacity 0.3s ease;
 }
 
-.feedback.submitted {
+.frinny_feedback.submitted {
     justify-content: center;
     color: #28a745;
     font-size: 0.9em;
     font-style: italic;
 }
 
-.feedback.error {
+.frinny_feedback.error {
     justify-content: center;
     color: #dc3545;
     font-size: 0.9em;
     font-style: italic;
 }
 
-.feedback-confirmation,
-.feedback-error {
+.frinny_feedback-confirmation,
+.frinny_feedback-error {
     padding: 4px 8px;
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.05);
 }
 
-.feedback button {
+.frinny_feedback button {
     background: none;
     border: none;
     padding: 4px 8px;
@@ -171,11 +171,11 @@
     transition: color 0.2s;
 }
 
-.feedback button:hover {
+.frinny_feedback button:hover {
     color: #007bff;
 }
 
-.typing-indicator {
+.frinny_typing-indicator {
     align-self: flex-start;
     background: #f0f2f5;
     padding: 12px;
@@ -186,21 +186,21 @@
     gap: 8px;
 }
 
-.typing-indicator .dots {
+.frinny_typing-indicator .dots {
     display: flex;
 }
 
-.typing-indicator .dots span {
+.frinny_typing-indicator .dots span {
     animation: typing 1.4s infinite;
     animation-fill-mode: both;
     margin: 0 2px;
 }
 
-.typing-indicator .dots span:nth-child(2) {
+.frinny_typing-indicator .dots span:nth-child(2) {
     animation-delay: 0.2s;
 }
 
-.typing-indicator .dots span:nth-child(3) {
+.frinny_typing-indicator .dots span:nth-child(3) {
     animation-delay: 0.4s;
 }
 
