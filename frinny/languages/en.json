@@ -23,6 +23,9 @@
         },
         "error": {
             "failedResponse": "I apologize, but I encountered an error processing your request. Please try again."
+        },
+        "chat": {
+            "responsePrefix": "Frinny"
         }
     }
 } 

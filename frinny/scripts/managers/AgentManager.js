@@ -500,7 +500,7 @@ export class AgentManager {
 
             // Get the last 5 Frinny-specific interactions
             const frinnyContext = recentMessages
-                .filter(m => m.content.startsWith('!frinny') || m.speaker.alias === 'Frinny')
+                .filter(m => m.content.toLowerCase().startsWith('!frinny') || m.speaker.alias === 'Frinny')
                 .slice(-5)
                 .map(m => ({
                     role: m.speaker.alias === 'Frinny' ? 'assistant' : 'user',
@@ -509,6 +509,7 @@ export class AgentManager {
 
             const payload = {
                 content,
+                userId,
                 conversation_history: {
                     general_context: generalContext,
                     frinny_interactions: frinnyContext

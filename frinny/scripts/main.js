@@ -141,18 +141,38 @@ Hooks.on('getSceneControlButtons', (controls) => {
 });
 
 // Handle chat commands
-Hooks.on('chatMessage', (chatLog, message, chatData) => {
+Hooks.on('chatMessage', async (chatLog, message, chatData) => {
+    // Log the chat message but don't intercept Frinny commands here
     logHookExecution('chatMessage', {
         messageLength: message.length,
         userId: game.user.id,
-        isFrinnyCommand: message.startsWith('!Frinny'),
+        isFrinnyCommand: message.toLowerCase().startsWith('!frinny'),
         message: message,
         chatLogId: chatLog.id,
         chatDataType: chatData?.type || 'unknown'
     });
+    
+    // Always return true to allow all messages to be processed normally
+    return true;
+});
 
-    if (message.startsWith('!Frinny')) {
-        const query = message.slice(7).trim();
+// Process Frinny commands after the message has been created
+Hooks.on('createChatMessage', async (message, options, userId) => {
+    // Only process messages from the current user
+    if (userId !== game.user.id) return;
+    
+    const content = message.content;
+    const isFrinnyCommand = content.toLowerCase().startsWith('!frinny');
+    
+    logHookExecution('createChatMessage', {
+        messageId: message.id,
+        userId: userId,
+        isFrinnyCommand: isFrinnyCommand,
+        content: content
+    });
+    
+    if (isFrinnyCommand) {
+        const query = content.slice(7).trim();
         logStateChange('Chat Command', 'processing', {
             query: query,
             userId: game.user.id,
@@ -161,19 +181,25 @@ Hooks.on('chatMessage', (chatLog, message, chatData) => {
         });
 
         if (game.frinny) {
-            game.frinny._handleMessageSend(query, true);
-            logStateChange('Chat Command', 'handled', {
-                success: true,
-                command: 'frinny',
-                queryLength: query.length
-            });
+            try {
+                // Process the command
+                await game.frinny._handleMessageSend(query, true);
+                
+                logStateChange('Chat Command', 'handled', {
+                    success: true,
+                    command: 'frinny',
+                    queryLength: query.length
+                });
+            } catch (error) {
+                logError('processing Frinny command', error);
+                ui.notifications.error(game.i18n.localize('frinny.error.commandProcessing'));
+            }
         } else {
-            logHookSkip('chatMessage', 'game.frinny not initialized', {
+            logHookSkip('createChatMessage', 'game.frinny not initialized', {
                 command: 'frinny',
                 userId: game.user.id
             });
         }
-        return false; // Prevent default chat message
     }
 });
 
