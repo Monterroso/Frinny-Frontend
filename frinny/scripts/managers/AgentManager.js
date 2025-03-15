@@ -8,6 +8,7 @@ export class AgentManager {
     constructor() {
         this.isConnected = false;
         this.socket = null;
+        this.connectionPromise = null; // Track current connection attempt
         
         // HTTP API endpoint - can be configured for AWS API Gateway
         // AWS API Gateway HTTP URLs typically look like:
@@ -31,6 +32,9 @@ export class AgentManager {
         
         // Set up message handlers
         this._setupMessageHandlers();
+        
+        // Start periodic reconnection check
+        this._startPeriodicReconnection();
     }
 
     /**
@@ -124,123 +128,186 @@ export class AgentManager {
 
     /**
      * Initialize the WebSocket connection
-     * @returns {Promise<void>}
+     * @returns {Promise<void>} Promise that resolves when connection is established
      */
     async connect() {
-        try {
-            // Load robust-websocket from local lib directory if not available
-            if (!window.RobustWebSocket) {
-                // Use Foundry's built-in path resolution
-                const scriptPath = 'modules/frinny/scripts/lib/robust-websocket.js';
-                
-                // Create script element to load the library
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = scriptPath;
-                    script.onload = resolve;
-                    script.onerror = (error) => {
-                        console.error('Failed to load robust-websocket from module path:', error);
-                        reject(new Error(`Failed to load robust-websocket from ${scriptPath}. Make sure the file exists in your module directory.`));
-                    };
-                    document.head.appendChild(script);
-                });
-                
-                // Verify that RobustWebSocket is now available
-                if (!window.RobustWebSocket) {
-                    throw new Error('RobustWebSocket was not properly loaded. Check the module structure.');
-                }
-            }
-
-            // Create WebSocket URL with user ID as query parameter
-            const wsUrlWithParams = `${this.wsUrl}?userId=${this.userId}`;
-            
-            // Initialize robust-websocket
-            this.socket = new RobustWebSocket(wsUrlWithParams, null, {
-                // Configuration options
-                timeout: 30000, // 30 seconds
-                shouldReconnect: (event, ws) => {
-                    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                        return false; // Stop reconnecting after max attempts
-                    }
-                    
-                    this.reconnectAttempts++;
-                    
-                    // Return delay in ms
-                    return Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
-                }
-            });
-
-            // Connection event handlers
-            this.socket.addEventListener('open', () => {
-                logBackendCommunication('WebSocket connection', true, {
-                    userId: this.userId
-                });
-                this.isConnected = true;
-                this.reconnectAttempts = 0;
-            });
-
-            this.socket.addEventListener('close', (event) => {
-                logBackendCommunication('WebSocket connection', false, {
-                    reason: event.reason || 'disconnected',
-                    code: event.code,
-                    userId: this.userId
-                });
-                this.isConnected = false;
-
-                // Reject all pending requests on disconnect
-                for (const [requestId, { reject }] of this.pendingRequests) {
-                    reject(new Error('WebSocket disconnected'));
-                }
-                this.pendingRequests.clear();
-            });
-
-            this.socket.addEventListener('error', (error) => {
-                logError('WebSocket connection', error, {
-                    userId: this.userId,
-                    attempt: this.reconnectAttempts + 1,
-                    maxAttempts: this.maxReconnectAttempts
-                });
-
-                // Reject all pending requests on connection error
-                for (const [requestId, { reject }] of this.pendingRequests) {
-                    reject(new Error('WebSocket connection error'));
-                }
-                this.pendingRequests.clear();
-            });
-
-            // Message handler
-            this.socket.addEventListener('message', (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    // Route message to appropriate handler based on type or action
-                    // API Gateway typically uses 'action' field
-                    const messageType = data.action;
-                    
-                    if (messageType && this.messageHandlers.has(messageType)) {
-                        this.messageHandlers.get(messageType)(data);
-                    } else {
-                        logError('WebSocket message', new Error('Unknown message type'), {
-                            type: messageType,
-                            data: data,
-                            event: event
+        // If already connecting, return the existing promise
+        if (this.connectionPromise) {
+            return this.connectionPromise;
+        }
+        
+        // Create a new connection promise
+        this.connectionPromise = new Promise(async (resolve, reject) => {
+            try {
+                // If we already have a socket, clean it up first
+                if (this.socket) {
+                    try {
+                        // Remove existing event listeners to prevent memory leaks
+                        this.socket.removeEventListener('open', this._onOpen);
+                        this.socket.removeEventListener('close', this._onClose);
+                        this.socket.removeEventListener('error', this._onError);
+                        this.socket.removeEventListener('message', this._onMessage);
+                        
+                        // Close the existing socket
+                        this.socket.close(1000, "Reconnecting");
+                        this.socket = null;
+                    } catch (error) {
+                        // Just log the error and continue with reconnection
+                        logError('Error cleaning up existing socket', error, {
+                            userId: this.userId
                         });
                     }
-                } catch (error) {
-                    logError('WebSocket message parsing', error, {
-                        data: event.data
-                    });
                 }
-            });
+                
+                // Load robust-websocket from local lib directory if not available
+                if (!window.RobustWebSocket) {
+                    // Use Foundry's built-in path resolution
+                    const scriptPath = 'modules/frinny/scripts/lib/robust-websocket.js';
+                    
+                    // Create script element to load the library
+                    await new Promise((resolveScript, rejectScript) => {
+                        const script = document.createElement('script');
+                        script.src = scriptPath;
+                        script.onload = resolveScript;
+                        script.onerror = (error) => {
+                            console.error('Failed to load robust-websocket from module path:', error);
+                            rejectScript(new Error(`Failed to load robust-websocket from ${scriptPath}. Make sure the file exists in your module directory.`));
+                        };
+                        document.head.appendChild(script);
+                    });
+                    
+                    // Verify that RobustWebSocket is now available
+                    if (!window.RobustWebSocket) {
+                        throw new Error('RobustWebSocket was not properly loaded. Check the module structure.');
+                    }
+                }
 
-        } catch (error) {
-            logError('WebSocket initialization', error, {
-                userId: this.userId,
-                wsUrl: this.wsUrl
-            });
-            this.isConnected = false;
-            throw error;
-        }
+                // Create WebSocket URL with user ID as query parameter
+                const wsUrlWithParams = `${this.wsUrl}?userId=${this.userId}`;
+                
+                // Set a timeout to reject if connection takes too long
+                const connectionTimeoutId = setTimeout(() => {
+                    reject(new Error('WebSocket connection timeout after 15 seconds'));
+                    this.connectionPromise = null;
+                }, 15000); // 15 second timeout for connection
+                
+                // Initialize robust-websocket
+                this.socket = new RobustWebSocket(wsUrlWithParams, null, {
+                    // Configuration options
+                    timeout: 30000, // 30 seconds
+                    shouldReconnect: (event, ws) => {
+                        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                            return false; // Stop reconnecting after max attempts
+                        }
+                        
+                        this.reconnectAttempts++;
+                        
+                        // Return delay in ms
+                        return Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
+                    }
+                });
+
+                // Create enhanced event handlers that also resolve/reject the connection promise
+                this._onOpen = (event) => {
+                    // Clear the connection timeout
+                    clearTimeout(connectionTimeoutId);
+                    
+                    logBackendCommunication('WebSocket connection', true, {
+                        userId: this.userId
+                    });
+                    this.isConnected = true;
+                    this.reconnectAttempts = 0;
+                    
+                    // Resolve the connection promise
+                    resolve();
+                    this.connectionPromise = null;
+                };
+
+                this._onClose = (event) => {
+                    logBackendCommunication('WebSocket connection', false, {
+                        reason: event.reason || 'disconnected',
+                        code: event.code,
+                        userId: this.userId
+                    });
+                    this.isConnected = false;
+
+                    // Reject all pending requests on disconnect
+                    for (const [requestId, { reject }] of this.pendingRequests) {
+                        reject(new Error('WebSocket disconnected'));
+                    }
+                    this.pendingRequests.clear();
+                    
+                    // If connection promise is still pending, reject it
+                    if (this.connectionPromise) {
+                        clearTimeout(connectionTimeoutId);
+                        reject(new Error(`WebSocket connection closed: ${event.reason || 'disconnected'}`));
+                        this.connectionPromise = null;
+                    }
+                };
+
+                this._onError = (error) => {
+                    logError('WebSocket connection', error, {
+                        userId: this.userId,
+                        attempt: this.reconnectAttempts + 1,
+                        maxAttempts: this.maxReconnectAttempts
+                    });
+
+                    // Reject all pending requests on connection error
+                    for (const [requestId, { reject }] of this.pendingRequests) {
+                        reject(new Error('WebSocket connection error'));
+                    }
+                    this.pendingRequests.clear();
+                    
+                    // If connection promise is still pending, reject it
+                    if (this.connectionPromise) {
+                        clearTimeout(connectionTimeoutId);
+                        reject(new Error('WebSocket connection error'));
+                        this.connectionPromise = null;
+                    }
+                };
+
+                this._onMessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        // Route message to appropriate handler based on type or action
+                        // API Gateway typically uses 'action' field
+                        const messageType = data.action;
+                        
+                        if (messageType && this.messageHandlers.has(messageType)) {
+                            this.messageHandlers.get(messageType)(data);
+                        } else {
+                            logError('WebSocket message', new Error('Unknown message type'), {
+                                type: messageType,
+                                data: data,
+                                event: event
+                            });
+                        }
+                    } catch (error) {
+                        logError('WebSocket message parsing', error, {
+                            data: event.data
+                        });
+                    }
+                };
+
+                // Connection event handlers
+                this.socket.addEventListener('open', this._onOpen);
+                this.socket.addEventListener('close', this._onClose);
+                this.socket.addEventListener('error', this._onError);
+                this.socket.addEventListener('message', this._onMessage);
+
+            } catch (error) {
+                logError('WebSocket initialization', error, {
+                    userId: this.userId,
+                    wsUrl: this.wsUrl
+                });
+                this.isConnected = false;
+                reject(error);
+                this.connectionPromise = null;
+            }
+        });
+        
+        return this.connectionPromise;
     }
 
     /**
@@ -465,16 +532,48 @@ export class AgentManager {
     }
 
     /**
+     * Send a request with WebSocket
+     * @param {string} eventName - WebSocket event name
+     * @param {Object} data - The data to send
+     * @returns {Promise<Object>} The server's response
+     * @private
+     */
+    async _sendEvent(eventName, data) {
+        // If not connected, attempt to reconnect
+        if (!this.isConnected || !this.socket) {
+            try {
+                // Reset reconnection attempts to allow reconnection
+                this.reconnectAttempts = 0;
+                
+                // Log reconnection attempt
+                logBackendCommunication('Attempting websocket reconnection on user action', true, {
+                    eventName,
+                    userId: this.userId
+                });
+                
+                // Attempt to reconnect - this will wait until connection is established
+                await this.connect();
+                
+                // No need for additional waiting - connect() only resolves when connection is ready
+                // If we get here, the connection was successful
+            } catch (error) {
+                logError('WebSocket reconnection attempt', error, {
+                    eventName,
+                    userId: this.userId
+                });
+                throw new Error(`Failed to send ${eventName}: WebSocket reconnection failed - ${error.message}`);
+            }
+        }
+        
+        return await this._emitAndWait(eventName, data);
+    }
+
+    /**
      * Send the query to the backend
      * @private
      */
     async _sendQuery(payload) {
-        // Prefer WebSocket if connected
-        if (this.isConnected) {
-            return await this._emitAndWait('query', payload);
-        }
-        // Fallback to HTTP
-        return await this._sendRequest('query', payload);
+        return this._sendEvent('query', payload);
     }
 
     /**
@@ -482,17 +581,7 @@ export class AgentManager {
      * @param {Object} context - The character creation context
      */
     async notifyCharacterCreation(context) {
-        try {
-            if (this.isConnected) {
-                return await this._emitAndWait('character_creation_start', context);
-            }
-            return await this._sendRequest('character/create', context);
-        } catch (error) {
-            if (error.message === 'WebSocket not connected') {
-                return await this._sendRequest('character/create', context);
-            }
-            throw error;
-        }
+        return this._sendEvent('character_creation_start', context);
     }
 
     /**
@@ -500,17 +589,7 @@ export class AgentManager {
      * @param {Object} combatState - The current combat state
      */
     async notifyCombatTurn(combatState) {
-        try {
-            if (this.isConnected) {
-                return await this._emitAndWait('combat_turn', combatState);
-            }
-            return await this._sendRequest('combat/suggest', combatState);
-        } catch (error) {
-            if (error.message === 'WebSocket not connected') {
-                return await this._sendRequest('combat/suggest', combatState);
-            }
-            throw error;
-        }
+        return this._sendEvent('combat_turn', combatState);
     }
 
     /**
@@ -518,17 +597,7 @@ export class AgentManager {
      * @param {Object} levelUpData - The level up context data
      */
     async notifyLevelUp(levelUpData) {
-        try {
-            if (this.isConnected) {
-                return await this._emitAndWait('level_up', levelUpData);
-            }
-            return await this._sendRequest('character/level-up', levelUpData);
-        } catch (error) {
-            if (error.message === 'WebSocket not connected') {
-                return await this._sendRequest('character/level-up', levelUpData);
-            }
-            throw error;
-        }
+        return this._sendEvent('level_up', levelUpData);
     }
 
     /**
@@ -536,17 +605,7 @@ export class AgentManager {
      * @param {Object} combatData - Initial combat state data
      */
     async notifyCombatStart(combatData) {
-        try {
-            if (this.isConnected) {
-                return await this._emitAndWait('combat_start', combatData);
-            }
-            return await this._sendRequest('combat/start', combatData);
-        } catch (error) {
-            if (error.message === 'WebSocket not connected') {
-                return await this._sendRequest('combat/start', combatData);
-            }
-            throw error;
-        }
+        return this._sendEvent('combat_start', combatData);
     }
 
     /**
@@ -555,46 +614,33 @@ export class AgentManager {
      * @param {string} type - The feedback type ('positive' or 'negative')
      */
     async submitFeedback(messageId, type) {
-        // Use HTTP for feedback as it's not time-critical
-        return this._sendRequest('feedback', { messageId, type });
+        // Since we're removing HTTP fallbacks, use WebSocket for feedback too
+        return this._sendEvent('feedback', { messageId, type });
     }
 
     /**
-     * Send an HTTP request to the backend
+     * Start periodic reconnection attempts when disconnected
      * @private
      */
-    async _sendRequest(endpoint, data) {
-        try {
-            // Ensure endpoint starts with a slash if not already
-            const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-            
-            // For API Gateway, we might need to use the full URL without additional path
-            // If backendUrl already includes the endpoint (like API Gateway stage paths)
-            const url = this.backendUrl.includes('/api') ? 
-                this.backendUrl : 
-                `${this.backendUrl}${formattedEndpoint}`;
+    _startPeriodicReconnection() {
+        // Check every 2 minutes if we need to reconnect
+        setInterval(() => {
+            // Only attempt reconnection if we're not connected and not already connecting
+            if (!this.isConnected && !this.socket && !this.connectionPromise) {
+                // Reset reconnection attempts to allow reconnection
+                this.reconnectAttempts = 0;
                 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'User-Id': this.userId
-                },
-                body: JSON.stringify(data)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                logBackendCommunication('Attempting periodic websocket reconnection', true, {
+                    userId: this.userId
+                });
+                
+                // Attempt to reconnect
+                this.connect().catch(error => {
+                    logError('Periodic websocket reconnection failed', error, {
+                        userId: this.userId
+                    });
+                });
             }
-
-            return await response.json();
-        } catch (error) {
-            logError('HTTP request', error, {
-                endpoint,
-                userId: this.userId,
-                ...data
-            });
-            throw error;
-        }
+        }, 120000); // 2 minutes
     }
 } 
