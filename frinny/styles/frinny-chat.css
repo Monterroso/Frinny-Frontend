@@ -257,33 +257,3 @@
 .send-button i {
     font-size: 16px;
 }
-
-.scroll-to-bottom {
-    position: absolute;
-    bottom: 80px;
-    right: 20px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #007bff;
-    color: white;
-    border: none;
-    cursor: pointer;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s, visibility 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 100;
-}
-
-.scroll-to-bottom.visible {
-    opacity: 1;
-    visibility: visible;
-}
-
-.scroll-to-bottom:hover {
-    background: #0056b3;
-} 

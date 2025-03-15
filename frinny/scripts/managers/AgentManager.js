@@ -328,7 +328,6 @@ export class AgentManager {
         const requestId = Date.now().toString();
         const payload = {
             action: type, // API Gateway uses 'action' for routing
-            type,         // Keep type for backward compatibility
             request_id: requestId,
             ...data
         };
