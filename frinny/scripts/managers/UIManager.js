@@ -31,10 +31,6 @@ export class FrinnyChat extends Application {
         this.avatarState = 'default'; // Possible states: default, thinking, happy, confused
         this.avatarStateTimer = null;
         
-        // Track if user is actively scrolling
-        this.isUserScrolling = false;
-        this.scrollTimeout = null;
-        
         // Load saved messages
         this._loadMessages();
 
@@ -57,10 +53,7 @@ export class FrinnyChat extends Application {
                     }
                 }, 1000);
             }
-            this.render(false).then(() => {
-                // Ensure we scroll to bottom when typing indicator appears/disappears
-                // No need to call _scrollToBottom here as it's now called in render()
-            });
+            this.render(false)
         });
         
         // Monitor pending requests to update avatar state
@@ -131,7 +124,7 @@ export class FrinnyChat extends Application {
         }
         
         return {
-            messages: this.messages,
+            messages: [...this.messages].reverse(), // Create a copy and reverse it to display messages in reverse order
             isTyping: this.isTyping,
             avatarUrl: avatarUrl,
             isAvatarCollapsed: this.isAvatarCollapsed,
@@ -143,13 +136,6 @@ export class FrinnyChat extends Application {
         // Store isInitialOpen flag if window is not currently rendered but will be
         const isInitialOpen = force === true && !this.element.length;
         
-        console.log('FrinnyChat render:', { 
-            isInitialOpen, 
-            force, 
-            hasElement: !!this.element.length,
-            options
-        });
-        
         // Update visibility flag - don't await to avoid delaying the render
         if (force === true || force === false) {
             this.isVisible = force;
@@ -159,24 +145,7 @@ export class FrinnyChat extends Application {
         // Perform the render
         const result = await super.render(force, options);
         
-        // Scroll to the bottom of the message history after rendering
-        this._scrollToBottom();
-        
         return result;
-    }
-
-    /**
-     * Scrolls the message history container to the bottom
-     * @private
-     */
-    _scrollToBottom() {
-        // Wait for the next frame to ensure the DOM is updated
-        requestAnimationFrame(() => {
-            const messageHistory = this.element.find('.frinny_message-history');
-            if (messageHistory.length && !this.isUserScrolling) {
-                messageHistory.scrollTop(messageHistory[0].scrollHeight);
-            }
-        });
     }
 
     // Override close to ensure visibility flag is updated
@@ -242,48 +211,7 @@ export class FrinnyChat extends Application {
             inactiveImg.attr('src', avatarUrl);
         }
 
-        // Track scrolling in message history
-        const messageHistory = html.find('.frinny_message-history');
-        if (messageHistory.length) {
-            // Set up scroll event listener
-            messageHistory.on('scroll', () => {
-                // User is actively scrolling
-                this.isUserScrolling = true;
-                
-                // Clear any existing timeout
-                if (this.scrollTimeout) {
-                    clearTimeout(this.scrollTimeout);
-                }
-                
-                // Reset the flag after a short delay of inactivity
-                this.scrollTimeout = setTimeout(() => {
-                    this.isUserScrolling = false;
-                    
-                    // Check if user scrolled to bottom or near bottom
-                    const container = messageHistory[0];
-                    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
-                    
-                    // If user scrolled to bottom, we can resume auto-scrolling
-                    if (isAtBottom) {
-                        this.isUserScrolling = false;
-                    }
-                }, 1000);
-            });
-            
-            // Set up scrollend event if supported by the browser
-            if ('onscrollend' in window) {
-                messageHistory[0].addEventListener('scrollend', () => {
-                    // Check if user scrolled to bottom or near bottom
-                    const container = messageHistory[0];
-                    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
-                    
-                    // If user scrolled to bottom, we can resume auto-scrolling
-                    if (isAtBottom) {
-                        this.isUserScrolling = false;
-                    }
-                });
-            }
-        }
+        
 
         // Input handling
         const input = html.find('.chat-input');
