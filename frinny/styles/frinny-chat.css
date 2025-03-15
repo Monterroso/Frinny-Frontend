@@ -120,18 +120,21 @@
     padding: 12px;
     border-radius: 12px;
     position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .frinny_message.user {
     align-self: flex-end;
-    background: #007bff;
-    color: white;
+    background: #7b4f2f; /* Match send button color */
+    color: #f8ecc9; /* Light parchment color for text */
+    border: 1px solid #6a4428; /* Slightly darker border */
 }
 
 .frinny_message.assistant {
     align-self: flex-start;
-    background: #f0f2f5;
-    color: #1c1e21;
+    background: #f8f2e2; /* Light parchment color background */
+    color: #4a3520; /* Dark brown text */
+    border: 1px solid #d8c8b0; /* Light brown border */
 }
 
 .frinny_feedback {
@@ -142,16 +145,29 @@
     transition: opacity 0.3s ease;
 }
 
+.frinny_feedback button {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: #a08060; /* Medium brown for icons */
+    transition: color 0.2s;
+}
+
+.frinny_feedback button:hover {
+    color: #7b4f2f; /* Match send button color */
+}
+
 .frinny_feedback.submitted {
     justify-content: center;
-    color: #28a745;
+    color: #5a7d3b; /* Forest green for success */
     font-size: 0.9em;
     font-style: italic;
 }
 
 .frinny_feedback.error {
     justify-content: center;
-    color: #dc3545;
+    color: #a03c28; /* Rusty red for errors */
     font-size: 0.9em;
     font-style: italic;
 }
@@ -160,31 +176,19 @@
 .frinny_feedback-error {
     padding: 4px 8px;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.05);
-}
-
-.frinny_feedback button {
-    background: none;
-    border: none;
-    padding: 4px 8px;
-    cursor: pointer;
-    color: #666;
-    transition: color 0.2s;
-}
-
-.frinny_feedback button:hover {
-    color: #007bff;
+    background: rgba(248, 242, 226, 0.5); /* Light parchment with transparency */
 }
 
 .frinny_typing-indicator {
     align-self: flex-start;
-    background: #f0f2f5;
+    background: #f8f2e2; /* Light parchment color background */
     padding: 12px;
     border-radius: 12px;
-    color: #666;
+    color: #7b4f2f; /* Match send button color */
     display: flex;
     align-items: center;
     gap: 8px;
+    border: 1px solid #d8c8b0; /* Light brown border */
 }
 
 .frinny_typing-indicator .dots {
@@ -227,19 +231,27 @@
 .chat-input {
     flex: 1;
     padding: 12px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #c0a080; /* Lighter brown border */
     border-radius: 20px;
     font-size: 14px;
+    background-color: #f8f2e2; /* Light parchment color background */
+    color: #4a3520; /* Dark brown text color */
 }
 
 .chat-input:focus {
     outline: none;
-    border-color: #007bff;
+    border-color: #7b4f2f; /* Match the send button color */
+    box-shadow: 0 0 5px rgba(123, 79, 47, 0.3); /* Subtle glow matching the button */
+}
+
+.chat-input::placeholder {
+    color: #a08060; /* Medium brown for placeholder text */
+    font-style: italic;
 }
 
 .send-button {
-    background: #007bff;
-    color: white;
+    background: #7b4f2f; /* Parchment/leather brown color */
+    color: #f8ecc9; /* Aged parchment color for the icon */
     border: none;
     width: 40px;
     height: 40px;
@@ -248,13 +260,39 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background-color 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .send-button:hover {
-    background: #0056b3;
+    background: #8e5c38; /* Slightly lighter brown on hover */
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.send-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .send-button i {
     font-size: 16px;
+    /* Add a subtle glow effect */
+    text-shadow: 0 0 5px rgba(248, 236, 201, 0.5);
+}
+
+/* Add a subtle magical effect on hover */
+.send-button:hover i {
+    animation: magical-glow 1.5s infinite alternate;
+}
+
+@keyframes magical-glow {
+    from {
+        text-shadow: 0 0 5px rgba(248, 236, 201, 0.5);
+    }
+    to {
+        text-shadow: 0 0 10px rgba(248, 236, 201, 0.8), 0 0 15px rgba(248, 236, 201, 0.5);
+    }
 }
