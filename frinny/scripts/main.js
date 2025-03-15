@@ -140,22 +140,6 @@ Hooks.on('getSceneControlButtons', (controls) => {
     });
 });
 
-// Handle chat commands
-Hooks.on('chatMessage', async (chatLog, message, chatData) => {
-    // Log the chat message but don't intercept Frinny commands here
-    logHookExecution('chatMessage', {
-        messageLength: message.length,
-        userId: game.user.id,
-        isFrinnyCommand: message.toLowerCase().startsWith('!frinny'),
-        message: message,
-        chatLogId: chatLog.id,
-        chatDataType: chatData?.type || 'unknown'
-    });
-    
-    // Always return true to allow all messages to be processed normally
-    return true;
-});
-
 // Process Frinny commands after the message has been created
 Hooks.on('createChatMessage', async (message, options, userId) => {
     // Only process messages from the current user
