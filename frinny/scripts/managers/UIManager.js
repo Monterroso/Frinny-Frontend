@@ -320,10 +320,14 @@ export class FrinnyChat extends Application {
                 content: response.content,
                 speaker: { 
                     alias: 'Frinny', 
-                    img: `modules/frinny/assets/images/happy.webp` 
                 },
                 type: CONST.CHAT_MESSAGE_TYPES.OTHER,
-                flavor: game.i18n.localize('frinny.chat.responsePrefix')
+                flags: {
+                    frinny: {
+                        isFrinnyMessage: true,
+                        messageType: 'success'
+                    }
+                }
             });
         } catch (error) {
             logError('getting AI response', error);
@@ -336,10 +340,14 @@ export class FrinnyChat extends Application {
                 content: game.i18n.localize('frinny.error.failedResponse'),
                 speaker: { 
                     alias: 'Frinny', 
-                    img: `modules/frinny/assets/images/confused.webp` 
                 },
                 type: CONST.CHAT_MESSAGE_TYPES.OTHER,
-                flavor: game.i18n.localize('frinny.chat.errorPrefix')
+                flags: {
+                    frinny: {
+                        isFrinnyMessage: true,
+                        messageType: 'error'
+                    }
+                }
             });
         }
     }

@@ -187,6 +187,65 @@ Hooks.on('createChatMessage', async (message, options, userId) => {
     }
 });
 
+// Add profile picture to Frinny's messages
+Hooks.on('renderChatMessage', (message, html, data) => {
+    // Check if this is a Frinny message using the flag
+    const isFrinnyMessage = message.getFlag('frinny', 'isFrinnyMessage') || message.speaker?.alias === 'Frinny';
+    
+    logHookExecution('renderChatMessage', {
+        messageId: message.id,
+        speaker: message.speaker?.alias,
+        isFrinnyMessage: isFrinnyMessage
+    });
+    
+    // Only process Frinny's messages
+    if (!isFrinnyMessage) return;
+    
+    try {
+        // Find the message header
+        const header = html.find('.message-header');
+        if (!header.length) return;
+        
+        // Determine which image to use based on the message type flag
+        let imgSrc = "modules/frinny/assets/images/default.webp";
+        const messageType = message.getFlag('frinny', 'messageType');
+        
+        if (messageType === 'error') {
+            imgSrc = "modules/frinny/assets/images/confused.webp";
+        } else if (messageType === 'success') {
+            imgSrc = "modules/frinny/assets/images/happy.webp";
+        } else {
+            // Default to happy if no message type is specified
+            imgSrc = "modules/frinny/assets/images/happy.webp";
+        }
+        
+        // Create the portrait element
+        const portrait = $(`<div class="portrait token"><img alt="Frinny" src="${imgSrc}" style="transform: scale(1);"></div>`);
+        
+        // Add the portrait to the header
+        header.prepend(portrait);
+        
+        // Add the with-image class to the header
+        header.addClass('with-image');
+        
+        // Add the user span element at the end of the header
+        // This matches the structure in the example HTML
+        const userSpan = $(`<span class="user">Frinny</span>`);
+        header.append(userSpan);
+        
+        // Remove any flavor text that might be displayed
+        html.find('.message-metadata').next('.flavor-text').remove();
+        
+        logStateChange('Chat Message', 'added portrait and user span', {
+            messageId: message.id,
+            imgSrc: imgSrc,
+            messageType: messageType || 'unknown'
+        });
+    } catch (error) {
+        logError('adding portrait to message', error);
+    }
+});
+
 // Handle new character sheets
 // Hooks.on('renderActorSheet', async (app, html, data) => {
 //     logHookExecution('renderActorSheet', {
