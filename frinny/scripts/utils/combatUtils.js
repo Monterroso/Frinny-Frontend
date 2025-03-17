@@ -42,19 +42,15 @@ export function gatherCombatStateData(combat, actor) {
     return {
         combatId: combat.id,
         userId: game.user.id,
+        system_id: game.system.id,
         round: combat.round,
         turn: combat.turn,
-        character: gatherCombatCharacterData(actor),
-        // Get all combatants with initiative
-        combatants: combat.turns.map(t => ({
-            id: t.id,
-            name: t.name,
-            initiative: t.initiative,
-            isAlly: t.actor?.hasPlayerOwner,
-            isEnemy: !t.actor?.hasPlayerOwner,
-            hp: t.actor?.system.attributes.hp,
-            ac: t.actor?.system.attributes.ac
-        }))
+        // Send the raw combat data
+        combat: combat.toObject(),
+        // Send the raw active character data
+        active_character: actor ? actor.toObject() : null,
+        // Send simplified combatant data for all combatants
+        combatants: combat.turns.map(combatant => combatant.toObject())
     };
 }
 

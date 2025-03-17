@@ -488,40 +488,37 @@ export class AgentManager {
         try {
             const recentMessages = game.messages.contents;
             
-            // Get the last 10 general chat messages for context
-            const generalContext = recentMessages
+            // Get the last 10 general chat messages as raw data
+            const rawMessages = recentMessages
                 .slice(-10)
-                .map(m => ({
-                    role: 'context',
-                    speaker: m.speaker.alias || m.speaker.character?.name || 'Unknown',
-                    content: m.content,
-                    type: m.type
-                }));
+                .map(message => {
+                    // Return the message in its raw form, but ensure it's serializable
+                    // by converting any Roll objects to their serialized form
+                    const messageData = message.toObject();
+                    
+                    // If roll exists but isn't serialized, serialize it
+                    if (message.roll && typeof messageData.roll !== 'string') {
+                        messageData.roll = message.roll.toJSON();
+                    }
+                    
+                    return messageData;
+                });
 
-            // Get the last 5 Frinny-specific interactions
-            const frinnyContext = recentMessages
-                .filter(m => m.content.toLowerCase().startsWith('!frinny') || m.speaker.alias === 'Frinny')
-                .slice(-5)
-                .map(m => ({
-                    role: m.speaker.alias === 'Frinny' ? 'assistant' : 'user',
-                    content: m.speaker.alias === 'Frinny' ? m.content : m.content.slice(7).trim() // Remove !frinny prefix
-                }));
+            // Create current speaker data structure
+            const currentSpeaker = {
+                userId: game.user.id,
+                name: game.user.name,
+                actorId: game.user.character?.id || null,
+                actorName: game.user.character?.name || null
+            };
 
             const payload = {
                 content,
-                userId,
-                conversation_history: {
-                    general_context: generalContext,
-                    frinny_interactions: frinnyContext
-                },
-                current_speaker: game.user.character?.name || game.user.name,
+                system_id: game.system.id, // Include the system ID (e.g., "pf2e", "dnd5e")
+                raw_messages: rawMessages,
+                current_speaker: currentSpeaker,
                 is_public_chat: true,
-                // Include additional context that might be helpful
-                scene_context: {
-                    current_scene: game.scenes.current?.name,
-                    is_combat_active: game.combat?.started || false,
-                    current_round: game.combat?.round || 0
-                }
+                message_count: rawMessages.length
             };
 
             return this._sendQuery(payload);
@@ -532,7 +529,7 @@ export class AgentManager {
     }
 
     /**
-     * Send a request with WebSocket
+     * Send a request with WebSocket and adds the user's ID to the payload
      * @param {string} eventName - WebSocket event name
      * @param {Object} data - The data to send
      * @returns {Promise<Object>} The server's response

@@ -124,7 +124,7 @@ export function isNewCharacter(actor) {
 }
 
 /**
- * Gathers level up specific character data
+ * Gathers data for a character level up event
  * @param {Actor} actor - The character actor
  * @param {number} previousLevel - The character's previous level
  * @param {number} newLevel - The character's new level
@@ -134,13 +134,11 @@ export function gatherLevelUpData(actor, previousLevel, newLevel) {
     return {
         actorId: actor.id,
         userId: game.user.id,
+        system_id: game.system.id,
         previousLevel,
         newLevel,
-        character: {
-            ...gatherBasicCharacterData(actor),
-            level: newLevel,
-            items: gatherCharacterItems(actor)
-        }
+        // Send the raw character data
+        character: actor.toObject()
     };
 }
 
@@ -173,4 +171,19 @@ export function isValidLevelUp(actor) {
  */
 export function hasLevelIncreased(newLevel, previousLevel) {
     return newLevel > previousLevel;
+}
+
+/**
+ * Gathers data for a character creation event
+ * @param {Actor} actor - The character actor
+ * @returns {Object} - Character creation data
+ */
+export function gatherCharacterCreationData(actor) {
+    return {
+        actorId: actor.id,
+        userId: game.user.id,
+        system_id: game.system.id,
+        // Send the raw character data
+        character: actor.toObject()
+    };
 } 
