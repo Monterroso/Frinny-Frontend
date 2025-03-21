@@ -25,6 +25,7 @@ export class AgentManager {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.pendingRequests = new Map(); // Store both resolve and reject callbacks
+        // All of our events are set in pendingRequests and then we get the response from them. 
         this.messageHandlers = new Map(); // Store message handlers by type
         
         // Start monitoring pending requests
@@ -312,40 +313,18 @@ export class AgentManager {
 
     /**
      * Send a message and wait for response with proper error handling and cleanup
-     * @param {string} type - The message type
      * @param {Object} data - The data to send
      * @returns {Promise<Object>} The server's response
      * @private
      */
-    async _emitAndWait(type, data) {
+    async _emitAndWait(data) {
         // Validate connection state
         if (!this.isConnected || !this.socket) {
             throw new Error('WebSocket not connected');
         }
-        console.log('sending message', type, data);
         
-        // Create request ID
-        const requestId = Date.now().toString();
-        
-        // Prepare payload according to message type
-        let payload;
-        if (type === 'event') {
-            // For event messages, we just need to add the request_id to the payload
-            payload = {
-                ...data,
-                payload: {
-                    ...data.payload,
-                    request_id: requestId
-                }
-            };
-        } else {
-            // For standard messages (like queries), use the original format
-            payload = {
-                action: type,
-                request_id: requestId,
-                ...data
-            };
-        }
+        const requestId = data.request_id;
+        console.log('sending message', data.action, data);
 
         return new Promise((resolve, reject) => {
             let timeoutId;
@@ -380,7 +359,7 @@ export class AgentManager {
                     // Log before cleanup to ensure we have the request data
                     logError('WebSocket timeout', error, {
                         requestId,
-                        type,
+                        data,
                         elapsed: '30s',
                         pendingRequestCount: this.pendingRequests.size,
                         isConnected: this.isConnected
@@ -395,7 +374,7 @@ export class AgentManager {
                     // Log if somehow the request was already removed
                     logError('WebSocket timeout for missing request', new Error('Request not found'), {
                         requestId,
-                        type,
+                        data,
                         elapsed: '30s',
                         pendingRequestCount: this.pendingRequests.size,
                         isConnected: this.isConnected
@@ -405,12 +384,12 @@ export class AgentManager {
 
             try {
                 // Send the message
-                this.socket.send(JSON.stringify(payload));
+                this.socket.send(JSON.stringify(data));
 
                 // Log successful send
                 logBackendCommunication('WebSocket send', true, {
                     requestId,
-                    type,
+                    data,
                     userId: this.userId
                 });
 
@@ -419,7 +398,7 @@ export class AgentManager {
                 const wrappedError = new Error(`WebSocket send failed: ${error.message}`);
                 logError('WebSocket send', wrappedError, {
                     requestId,
-                    type,
+                    data,
                     originalError: error
                 });
 
@@ -544,13 +523,13 @@ export class AgentManager {
     }
 
     /**
-     * Send a request with WebSocket and adds the user's ID to the payload
-     * @param {string} eventName - WebSocket event name
+     * Send a message to the backend with appropriate formatting based on message type
+     * @param {string} type - Message type ('query' or 'event')
      * @param {Object} data - The data to send
      * @returns {Promise<Object>} The server's response
      * @private
      */
-    async _sendEvent(eventName, data) {
+    async _sendMessage(type, data) {
         // If not connected, attempt to reconnect
         if (!this.isConnected || !this.socket) {
             try {
@@ -559,7 +538,7 @@ export class AgentManager {
                 
                 // Log reconnection attempt
                 logBackendCommunication('Attempting websocket reconnection on user action', true, {
-                    eventName,
+                    type,
                     userId: this.userId
                 });
                 
@@ -568,24 +547,42 @@ export class AgentManager {
                 
             } catch (error) {
                 logError('WebSocket reconnection attempt', error, {
-                    eventName,
+                    type,
                     userId: this.userId
                 });
-                throw new Error(`Failed to send ${eventName}: WebSocket reconnection failed - ${error.message}`);
+                throw new Error(`Failed to send ${type}: WebSocket reconnection failed - ${error.message}`);
             }
         }
         
-        // Format event according to backend contract
-        const formattedData = {
-            action: 'event',  // Top-level action is always 'event'
-            payload: {
-                action: eventName,  // Specific event type
-                userId: this.userId,  // Add userId to the payload
-                ...data  // Include all other data in the payload
-            }
+        // Add userId to the data if needed
+        let messageData = {...data};
+        if (type === 'event') {
+            // For events, add userId to the payload object
+            messageData = {
+                ...messageData,
+                userId: this.userId
+            };
+        } else {
+            // For queries and other top-level actions, add userId directly
+            messageData.userId = this.userId;
+        }
+
+        // Generate request ID using timestamp for tracking
+        const requestId = Date.now().toString();
+        
+        // Create the final payload with action and request_id
+        const payload = {
+            action: type,
+            request_id: requestId,
+            ...(type === 'event' ? {
+                payload: {
+                    action: messageData.action,
+                    ...messageData
+                }
+            } : messageData)
         };
 
-        return await this._emitAndWait('event', formattedData);
+        return await this._emitAndWait(payload);
     }
 
     /**
@@ -593,7 +590,7 @@ export class AgentManager {
      * @private
      */
     async _sendQuery(payload) {
-        return this._sendEvent('query', payload);
+        return this._sendMessage('query', payload);
     }
 
     /**
@@ -601,7 +598,7 @@ export class AgentManager {
      * @param {Object} context - The character creation context
      */
     async notifyCharacterCreation(context) {
-        return this._sendEvent('character_creation_start', context);
+        return this._sendMessage('event', { action: 'character_creation_start', ...context });
     }
 
     /**
@@ -609,7 +606,7 @@ export class AgentManager {
      * @param {Object} combatState - The current combat state
      */
     async notifyCombatTurn(combatState) {
-        return this._sendEvent('combat_turn', combatState);
+        return this._sendMessage('event', { action: 'combat_turn', ...combatState });
     }
 
     /**
@@ -617,7 +614,7 @@ export class AgentManager {
      * @param {Object} levelUpData - The level up context data
      */
     async notifyLevelUp(levelUpData) {
-        return this._sendEvent('level_up', levelUpData);
+        return this._sendMessage('event', { action: 'level_up', ...levelUpData });
     }
 
     /**
@@ -625,7 +622,7 @@ export class AgentManager {
      * @param {Object} combatData - Initial combat state data
      */
     async notifyCombatStart(combatData) {
-        return this._sendEvent('combat_start', combatData);
+        return this._sendMessage('event', { action: 'combat_start', ...combatData });
     }
 
     /**
@@ -634,8 +631,7 @@ export class AgentManager {
      * @param {string} type - The feedback type ('positive' or 'negative')
      */
     async submitFeedback(messageId, type) {
-        // Since we're removing HTTP fallbacks, use WebSocket for feedback too
-        return this._sendEvent('feedback', { messageId, type });
+        return this._sendMessage('event', { action: 'feedback', messageId, type });
     }
 
     /**

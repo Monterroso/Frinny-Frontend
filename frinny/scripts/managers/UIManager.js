@@ -268,11 +268,7 @@ export class FrinnyChat extends Application {
 
         try {
             // Add user message to private chat
-            await this._addMessage({
-                type: 'user',
-                content: content,
-                timestamp: Date.now()
-            });
+            await this.addUserMessage(content);
 
             // Get response from agent
             console.log('Calling handlePrivateQuery');
@@ -283,20 +279,15 @@ export class FrinnyChat extends Application {
             this._setAvatarState('happy', 2000); // Show happy for 2 seconds
             
             // Add response to private chat
-            await this._addMessage(response);
+            await this.addResponseMessage(response.content, response.messageId);
         } catch (error) {
             logError('getting AI response', error);
             
             // Set avatar to confused state to indicate an error
             this._setAvatarState('confused', 2000); // Show confused for 2 seconds
             
-            const errorMsg = {
-                type: 'assistant',
-                content: game.i18n.localize('frinny.error.failedResponse'),
-                timestamp: Date.now(),
-                showFeedback: false
-            };
-            await this._addMessage(errorMsg);
+
+            await this.addErrorMessage();
         }
     }
 
@@ -491,5 +482,51 @@ export class FrinnyChat extends Application {
                 this._setAvatarState('default');
             }
         }, 1000);
+    }
+
+    /**
+     * Add a user message to the chat
+     * @param {string} content - The message content
+     * @returns {Promise<void>}
+     */
+    async addUserMessage(content) {
+        return this._addMessage({
+            type: 'user',
+            content: content,
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * Add a response message from Frinny
+     * @param {string} content - The message content
+     * @param {string|null} messageId - Optional message ID from backend
+     * @param {boolean} showFeedback - Whether to show feedback buttons
+     * @returns {Promise<void>}
+     */
+    async addResponseMessage(content, messageId = null, showFeedback = true) {
+        console.log('addResponseMessage called', { content, messageId, showFeedback });
+        return this._addMessage({
+            type: 'assistant',
+            content: content,
+            timestamp: Date.now(),
+            showFeedback: showFeedback,
+            messageId: messageId
+        });
+    }
+    
+    /**
+     * Add an error message from Frinny
+     * @param {string} content - The error message content
+     * @returns {Promise<void>}
+     */
+    async addErrorMessage(content) {
+        return this._addMessage({
+            type: 'assistant',
+            content: content || game.i18n.localize('frinny.error.failedResponse'),
+            timestamp: Date.now(),
+            showFeedback: false,
+            messageType: 'error'
+        });
     }
 }

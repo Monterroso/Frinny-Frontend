@@ -316,13 +316,7 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
             await game.frinny.render(true);
 
             // Add response to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: response.message,
-                timestamp: Date.now(),
-                showFeedback: true,
-                messageId: response.messageId
-            });
+            await game.frinny.addResponseMessage(response.content, response.messageId);
 
             logStateChange('Character Creation', 'process completed', {
                 actorId: app.actor.id,
@@ -336,12 +330,7 @@ Hooks.on('renderActorSheet', async (app, html, data) => {
             });
             
             // Add error message to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: game.i18n.localize('frinny.error.failedResponse'),
-                timestamp: Date.now(),
-                showFeedback: false
-            });
+            await game.frinny.addErrorMessage();
         }
     }
 });
@@ -384,22 +373,11 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
                 }
 
                 // Add response to private chat
-                await game.frinny._addMessage({
-                    type: 'assistant',
-                    content: response.message,
-                    timestamp: Date.now(),
-                    showFeedback: true,
-                    messageId: response.messageId
-                });
+                await game.frinny.addResponseMessage(response.content, response.messageId);
             } catch (error) {
                 logError('combat start processing', error);
                 // Add error message to private chat
-                await game.frinny._addMessage({
-                    type: 'assistant',
-                    content: game.i18n.localize('frinny.error.failedResponse'),
-                    timestamp: Date.now(),
-                    showFeedback: false
-                });
+                await game.frinny.addErrorMessage();
             }
         } else {
             logHookSkip('combatStart', 'game.frinny not initialized');
@@ -437,22 +415,11 @@ Hooks.on('updateCombat', async (combat, changed, options, userId) => {
             }
 
             // Add response to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: response.message,
-                timestamp: Date.now(),
-                showFeedback: true,
-                messageId: response.messageId
-            });
+            await game.frinny.addResponseMessage(response.content, response.messageId);
         } catch (error) {
             logError('combat turn processing', error);
             // Add error message to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: game.i18n.localize('frinny.error.failedResponse'),
-                timestamp: Date.now(),
-                showFeedback: false
-            });
+            await game.frinny.addErrorMessage();
         }
     } else {
         logHookSkip('updateCombat', 'game.frinny not initialized');
@@ -519,22 +486,11 @@ Hooks.on('updateActor', async (actor, changes, options, userId) => {
             await game.frinny.render(true);
 
             // Add response to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: response.message,
-                timestamp: Date.now(),
-                showFeedback: true,
-                messageId: response.messageId
-            });
+            await game.frinny.addResponseMessage(response.content, response.messageId);
         } catch (error) {
             logError('level up processing', error);
             // Add error message to private chat
-            await game.frinny._addMessage({
-                type: 'assistant',
-                content: game.i18n.localize('frinny.error.failedResponse'),
-                timestamp: Date.now(),
-                showFeedback: false
-            });
+            await game.frinny.addErrorMessage();
         }
     } else {
         logHookSkip('levelUp', 'game.frinny not initialized');
