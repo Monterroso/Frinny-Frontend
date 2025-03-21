@@ -56,7 +56,7 @@ export class AgentManager {
             this._handleSocketResponse(data.request_id, data);
         });
         
-        this.messageHandlers.set('combat_suggestion', (data) => {
+        this.messageHandlers.set('combat_response', (data) => {
             this._handleSocketResponse(data.request_id, data);
         });
         
@@ -324,13 +324,28 @@ export class AgentManager {
         }
         console.log('sending message', type, data);
         
-        // Create request ID and payload
+        // Create request ID
         const requestId = Date.now().toString();
-        const payload = {
-            action: type, // API Gateway uses 'action' for routing
-            request_id: requestId,
-            ...data
-        };
+        
+        // Prepare payload according to message type
+        let payload;
+        if (type === 'event') {
+            // For event messages, we just need to add the request_id to the payload
+            payload = {
+                ...data,
+                payload: {
+                    ...data.payload,
+                    request_id: requestId
+                }
+            };
+        } else {
+            // For standard messages (like queries), use the original format
+            payload = {
+                action: type,
+                request_id: requestId,
+                ...data
+            };
+        }
 
         return new Promise((resolve, reject) => {
             let timeoutId;
@@ -489,7 +504,7 @@ export class AgentManager {
             const recentMessages = game.messages.contents;
             
             // Get the last 10 general chat messages as raw data
-            const rawMessages = recentMessages
+            const conversation_history = recentMessages
                 .slice(-10)
                 .map(message => {
                     // Return the message in its raw form, but ensure it's serializable
@@ -514,11 +529,11 @@ export class AgentManager {
 
             const payload = {
                 content,
-                system_id: game.system.id, // Include the system ID (e.g., "pf2e", "dnd5e")
-                raw_messages: rawMessages,
+                system_id: game.system.id,
+                conversation_history: conversation_history,
                 current_speaker: currentSpeaker,
                 is_public_chat: true,
-                message_count: rawMessages.length
+                message_count: conversation_history.length
             };
 
             return this._sendQuery(payload);
@@ -551,8 +566,6 @@ export class AgentManager {
                 // Attempt to reconnect - this will wait until connection is established
                 await this.connect();
                 
-                // No need for additional waiting - connect() only resolves when connection is ready
-                // If we get here, the connection was successful
             } catch (error) {
                 logError('WebSocket reconnection attempt', error, {
                     eventName,
@@ -562,7 +575,17 @@ export class AgentManager {
             }
         }
         
-        return await this._emitAndWait(eventName, data);
+        // Format event according to backend contract
+        const formattedData = {
+            action: 'event',  // Top-level action is always 'event'
+            payload: {
+                action: eventName,  // Specific event type
+                userId: this.userId,  // Add userId to the payload
+                ...data  // Include all other data in the payload
+            }
+        };
+
+        return await this._emitAndWait('event', formattedData);
     }
 
     /**
