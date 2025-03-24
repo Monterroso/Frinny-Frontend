@@ -317,13 +317,12 @@ export class AgentManager {
      * @returns {Promise<Object>} The server's response
      * @private
      */
-    async _emitAndWait(data) {
+    async _emitAndWait(data, requestId) {
         // Validate connection state
         if (!this.isConnected || !this.socket) {
             throw new Error('WebSocket not connected');
         }
         
-        const requestId = data.request_id;
         console.log('sending message', data.action, data);
 
         return new Promise((resolve, reject) => {
@@ -417,6 +416,8 @@ export class AgentManager {
      * @private
      */
     _handleSocketResponse(requestId, data) {
+        console.log('handleSocketResponse', requestId, data);
+        console.log('pendingRequests', this.pendingRequests);
         if (this.pendingRequests.has(requestId)) {
             const { resolve } = this.pendingRequests.get(requestId);
             resolve(data);
@@ -553,9 +554,12 @@ export class AgentManager {
                 throw new Error(`Failed to send ${type}: WebSocket reconnection failed - ${error.message}`);
             }
         }
+
+        // Generate request ID using timestamp for tracking
+        const requestId = `${Date.now().toString()}:${this.userId}`;
         
         // Add userId to the data if needed
-        let messageData = {...data};
+        let messageData = {...data, request_id: requestId};
         if (type === 'event') {
             // For events, add userId to the payload object
             messageData = {
@@ -566,14 +570,10 @@ export class AgentManager {
             // For queries and other top-level actions, add userId directly
             messageData.userId = this.userId;
         }
-
-        // Generate request ID using timestamp for tracking
-        const requestId = Date.now().toString();
         
         // Create the final payload with action and request_id
         const payload = {
             action: type,
-            request_id: requestId,
             ...(type === 'event' ? {
                 payload: {
                     action: messageData.action,
@@ -582,7 +582,7 @@ export class AgentManager {
             } : messageData)
         };
 
-        return await this._emitAndWait(payload);
+        return await this._emitAndWait(payload, requestId);
     }
 
     /**
