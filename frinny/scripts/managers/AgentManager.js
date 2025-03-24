@@ -64,6 +64,25 @@ export class AgentManager {
         this.messageHandlers.set('level_up_response', (data) => {
             this._handleSocketResponse(data.request_id, data);
         });
+
+        // Handle character update events from server
+        this.messageHandlers.set('character_update', (data) => {
+            // Check if we have skill updates
+            if (data.updates?.skills) {
+                const actor = game.actors.get(data.actorId);
+                if (actor) {
+                    // Process each skill update
+                    Object.entries(data.updates.skills).forEach(([skillName, proficiency]) => {
+                        actor.modifyUserCharacterSkill(skillName, proficiency);
+                    });
+                } else {
+                    logError('Character update', new Error('Actor not found'), {
+                        actorId: data.actorId,
+                        messageId: data.message_id
+                    });
+                }
+            }
+        });
         
         this.messageHandlers.set('error', (error) => {
             logError('WebSocket server', error, {
