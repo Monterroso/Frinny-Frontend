@@ -137,8 +137,52 @@ export function gatherLevelUpData(actor, previousLevel, newLevel) {
         system_id: game.system.id,
         previousLevel,
         newLevel,
-        // Send the raw character data
-        character: actor.toObject()
+        // Send structured character data instead of raw actor
+        character: {
+            name: actor.name,
+            // Class information
+            class: actor.items.find(i => i.type === 'class')?.toObject() || null,
+            // Skills with their ranks
+            skills: Object.entries(actor.system.skills || {}).reduce((acc, [key, skill]) => {
+                if (skill.rank) {
+                    acc[key] = {
+                        name: key,
+                        rank: skill.rank
+                    };
+                }
+                return acc;
+            }, {}),
+            // All feats
+            feats: actor.items.filter(i => i.type === 'feat').map(feat => ({
+                id: feat.id,
+                name: feat.name,
+                level: feat.system.level?.value,
+                type: feat.system.category,
+                traits: feat.system.traits.value,
+                // description: feat.system.description.value
+            })),
+            // Other relevant attributes
+            abilities: actor.system.abilities,
+            attributes: {
+                hp: actor.system.attributes?.hp,
+                ac: actor.system.attributes?.ac
+            },
+            details: {
+                level: actor.system.details?.level?.value,
+                keyability: actor.system.details?.keyability?.value
+            },
+            // New additions at this level
+            newFeats: actor.items.filter(i => 
+                i.type === 'feat' && 
+                i.system.level?.taken === newLevel
+            ).map(feat => ({
+                id: feat.id,
+                name: feat.name,
+                level: feat.system.level?.value,
+                type: feat.system.category,
+                traits: feat.system.traits.value
+            }))
+        }
     };
 }
 

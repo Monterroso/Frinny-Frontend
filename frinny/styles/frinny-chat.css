@@ -296,3 +296,9 @@
         text-shadow: 0 0 10px rgba(248, 236, 201, 0.8), 0 0 15px rgba(248, 236, 201, 0.5);
     }
 }
+
+.frinny_message .content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    word-break: break-word;
+}
