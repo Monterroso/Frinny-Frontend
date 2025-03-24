@@ -3,6 +3,7 @@
  */
 
 import { logBackendCommunication, logError } from '../utils/logUtils.js';
+import SkillProficiencyManager from '../utils/skill-proficiency-manager.js';
 
 export class AgentManager {
     constructor() {
@@ -73,7 +74,7 @@ export class AgentManager {
                 if (actor) {
                     // Process each skill update
                     Object.entries(data.updates.skills).forEach(([skillName, proficiency]) => {
-                        actor.modifyUserCharacterSkill(skillName, proficiency);
+                        SkillProficiencyManager.modifySkillProficiency(data.actorId,skillName,proficiency);
                     });
                 } else {
                     logError('Character update', new Error('Actor not found'), {
@@ -479,8 +480,12 @@ export class AgentManager {
                 content: content
             });
 
+            // Get the actorId from the user's character
+            const actorId = game.user.character?.id || null;
+
             const payload = {
                 content,
+                actorId,
                 conversation_history: conversationContext,
                 is_public_chat: false
             };
